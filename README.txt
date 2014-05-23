@@ -6,6 +6,12 @@ This is a synoptic widget based on the SVG format. There is a demonstration prog
 Note that the widget needs to be in your PYTHONPATH, so doing "export PYTHONPATH=/full/path/to/app-maxiv-svgsynoptic/src" before may help.
 
 
+=== Requirements ===
+
+- Taurus (and Qt, PyQt, PyTango, etc)
+- qtwebkit (at least under CentOS, the "qtwebkit" package is apparently not automatically installed by PyQt)
+
+
 === The SVG file ===
 
 There are some requirements on the SVG file in order for the program to work correctly. They are subject to change.

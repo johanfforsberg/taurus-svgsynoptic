@@ -6,9 +6,6 @@ various areas to zoom in.
 
 import logging
 import os
-from subprocess import Popen
-import sys
-import threading
 
 from PyQt4 import QtCore, QtGui
 from PyQt4.QtCore import QUrl
@@ -16,7 +13,6 @@ from PyQt4.QtWebKit import QWebView, QWebPage
 
 from taurus.qt.qtgui.panel import TaurusWidget
 from taurus import Attribute
-from taurus.qt.qtgui.application import TaurusApplication
 
 import PyTango
 
@@ -204,8 +200,7 @@ class SynopticWidget(TaurusWidget):
         view.setPage(LoggingWebPage())
         view.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
 
-
-        html = QUrl("index.html")
+        html = QUrl(os.path.dirname(os.path.realpath(__file__)) + "/index.html")
         view.load(html)
 
         frame = view.page().mainFrame()

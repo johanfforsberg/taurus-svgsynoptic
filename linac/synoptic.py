@@ -6,7 +6,7 @@ from taurus.qt.qtgui.application import TaurusApplication
 import PyTango
 
 from synopticwidget import SynopticWidget
-from magnet import MagnetPanel
+#from magnet import MagnetPanel
 
 
 def main():
@@ -84,10 +84,11 @@ def main():
                     w.activateWindow()
                     w.raise_()
                 else:
-                    w = MagnetPanel()
-                    w.setModel(name)
-                    w.show()
-                    open_panels[name] = w
+                    # w = MagnetPanel()
+                    # w.setModel(name)
+                    # w.show()
+                    # open_panels[name] = w
+                    pass
 
     synoptic.clicked.connect(on_click)
     synoptic.rightClicked.connect(on_rightclick)

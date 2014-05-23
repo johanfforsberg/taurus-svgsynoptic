@@ -1,0 +1,40 @@
+#synoptic #thumbnail .container {
+    outline: 2px solid rgba(0,0,0,0.15);
+    border: 1px solid #AAA;
+    background: rgba(255,255,255,0.5);
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    width: 25%;
+    overflow: hidden;
+}
+
+#synoptic #thumbnail .indicator {
+    pointer-events: none;
+    position: absolute;
+    border: 1px solid #555;
+    outline: 2px solid rgba(200,180,0,0.5);
+}
+
+#synoptic #thumbnail svg {
+    opacity: 0.7;
+}
+
+#synoptic #thumbnail svg .layer:not(#background) {
+    visibility: hidden;
+}
+
+.marker {
+    fill: none;
+    stroke: red;
+    stroke-width: 200px;
+}
+
+button.thumbnail {
+    position: absolute;
+    bottom: 0px;
+    right: 0px;
+    border: 1px solid black;
+    width: 15px;
+    height: 15px;
+}

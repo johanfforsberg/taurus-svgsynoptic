@@ -1,0 +1,96 @@
+body {
+    margin: 0;
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    -moz-user-select:none;
+    -ms-user-select:none;
+    user-select:none;
+    cursor:default;
+
+    font-family: sans;
+}
+
+#synoptic {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+
+}
+
+#synoptic > .container {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+#synoptic #selectors .container {
+    position: absolute;
+    bottom: 0px;
+    left: 10px;
+}
+
+#synoptic .tooltip {
+    position:absolute;
+    padding: 3px;
+    background: black;
+    color: white;
+    position: absolute;
+    visibility: hidden;
+    white-space: nowrap;
+}
+
+div.layer-selector {
+    float: left;
+    margin-right: 10px;
+    padding: 5px 10px;
+    opacity: 0.5;
+    color: black;
+    font-weight: bold;
+    background: #808080;
+    border: 1px solid grey;
+}
+
+div.layer-selector.active {
+    color: white;
+    opacity: 1;
+}
+
+div.layer-selector.vacuum {
+    background: red;
+}
+
+div.layer-selector.diagnostic {
+    background: #5050FF;
+}
+
+div.layer-selector.magnet {
+    background: #50B050;
+}
+
+svg {
+    /* width: 100%; */
+    /* height: 100%; */
+}
+
+#synoptic #thumbnail .container {
+    outline: 2px solid rgba(0,0,0,0.15);
+    border: 1px solid #AAA;
+    background: rgba(255,255,255,0.5);
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    width: 25%;
+    overflow: hidden;
+}
+
+#synoptic #thumbnail .indicator {
+    pointer-events: none;
+    position: absolute;
+    border: 1px solid #555;
+    outline: 2px solid rgba(150,150,150,0.5);
+}
+
+#synoptic #thumbnail svg {
+    opacity: 0.7;
+}

@@ -11,6 +11,7 @@ from PyQt4 import QtCore, QtGui
 from PyQt4.QtCore import QUrl
 from PyQt4.QtWebKit import QWebView, QWebPage
 
+import panic
 from taurus.qt.qtgui.panel import TaurusWidget
 from taurus import Attribute
 
@@ -38,7 +39,10 @@ class JSInterface(QtCore.QObject):
 
         self._devices = dict()
         self._attributes = dict()
+        self._alarms = dict()
         self.selected_device = None
+
+        self.panic = panic.api()
 
         super(JSInterface, self).__init__(parent)
         self.evaljs.connect(self.evaluate_js)  # thread safety
@@ -70,9 +74,35 @@ class JSInterface(QtCore.QObject):
                 fmt = self._attributes[name].getFormat()
                 unit = self._attributes[name].getUnit()
                 value = evt_value.value
-                value_str = "%s %s" % (fmt % value, unit)
-                self.evaljs.emit("Synoptic.setAttribute(%r, %r)" %
-                                 (name, value_str))
+                if evt_value.type is PyTango._PyTango.CmdArgType.DevState:
+                    value_str = str(value)
+                else:
+                    value_str = fmt % value
+                attr_type = str(evt_value.type)
+                self.evaljs.emit("Synoptic.setAttribute(%r, %r, %r, %r)" %
+                                 (name, value_str, attr_type, unit))
+
+    def _set_sub_alarms(self, basename):
+        subalarms = self.panic.get(basename + "*")
+        for alarm in subalarms:
+            devname = alarm.tag.replace("__", "/").replace("_", "-").upper()
+            active = alarm.get_active()
+            #if (devname in self._devices) and (active is not None):
+            if active is not None:
+                self.evaljs.emit("Synoptic.setDeviceAlarm(%r, %s)" %
+                                 (devname, str(bool(active)).lower()))
+
+    def alarm_listener(self, evt_src, evt_type, evt_value):
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            name = evt_src.getNormalName()
+            if name:
+                print "alarm_listener", name
+                alarmname = str(name).rsplit("/", 1)[-1]
+                value = evt_value.value
+                self.evaljs.emit("Synoptic.setAlarm(%r, %s)" % (
+                    alarmname, str(value).lower()))
+                self._set_sub_alarms(alarmname)
 
     @QtCore.pyqtSlot(str, str)
     def left_click(self, kind, name):
@@ -91,8 +121,10 @@ class JSInterface(QtCore.QObject):
         mapping = {
             "device": self._register_device,
             "attribute": self._register_attribute,
-            "section": self._register_section
+            "section": self._register_section,
+            "alarm": self._register_alarm
         }
+        print "registering", kind, name
         return mapping[str(kind)](str(name))
 
     def _register_device(self, devname):
@@ -123,7 +155,26 @@ class JSInterface(QtCore.QObject):
         return False
 
     def _register_section(self, secname):
-        pass
+        return True
+
+    def _register_alarm(self, alarmname):
+        """
+        The name of the alarm should be the (beginning of) a device name
+        with "-" replaced by "_" and "/" by "__".
+        """
+        if alarmname in self._alarms:
+            return True
+        try:
+            devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
+            attr = Attribute("%s/%s" % (devname, alarmname))
+            self._alarms[alarmname] = attr
+            #alarm_device = alarmname.replace("__", "/").replace("_", "-")
+            attr.addListener(self.alarm_listener)
+            print("Registered alarm %s" % alarmname)
+            return True
+        except PyTango.DevFailed as df:
+            print "Failed to register alarm %s: %s" % (alarmname, df)
+        return False
 
     def select_devices(self, devnames):
         self.evaljs.emit("Synoptic.unselectAllDevices()")
@@ -200,7 +251,8 @@ class SynopticWidget(TaurusWidget):
         view.setPage(LoggingWebPage())
         view.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
 
-        html = QUrl(os.path.dirname(os.path.realpath(__file__)) + "/index.html")
+        path = os.path.dirname(os.path.realpath(__file__))
+        html = QUrl(os.path.join(path, "index.html"))
         view.load(html)
 
         frame = view.page().mainFrame()

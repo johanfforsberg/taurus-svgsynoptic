@@ -151,10 +151,11 @@ var Synoptic = window.Synoptic || {};
 
         // return the first node that matches class and data
         var getNode = function (cls, data) {
+            console.log("getNode " + cls + " " + data);
             var sel = svg
                     .selectAll("." + cls)
-                    .filter(function (d) {return d == data;});
-            console.log("getNode " +  sel);
+                    .filter(function (d) {console.log(d[cls]);
+                                          return d[cls] == data;});
             return sel.node();
         };
 

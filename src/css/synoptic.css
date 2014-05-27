@@ -1,7 +1,6 @@
 svg {
     /* width: 100%; */
     /* height: 100%; */
-    border: 1px solid grey;
 }
 
 svg text {
@@ -14,6 +13,10 @@ svg .attribute {
     opacity: 0.5;
 }
 
+svg .device {
+    fill: white;
+}
+
 svg .device.active,.attribute.active {
     opacity: 1;
 }
@@ -22,19 +25,31 @@ svg .status-UNKNOWN {
     fill: brown;
 }
 
+svg .status-OUT {
+    fill: #FFFFFF;
+}
+
+svg .status-IN {
+    fill: #00FF00;
+}
+
 /* only display "bad" statuses..? */
 svg .status-RUNNING {
-    display: none !important;
+    visibility: hidden !important;
     fill: #00A000;
 }
 
 svg .status-ON {
-    display: none !important;
+    visibility: hidden !important;
     fill: #00FF00;
 }
 
 svg .status-OFF, status-OFF > * {
     fill: #303030;
+}
+
+svg .status-ALARM {
+    fill: #FF6000 !important;
 }
 
 /* device selection rectangle */
@@ -45,6 +60,36 @@ svg rect.selection {
     stroke-linejoin: round;
     opacity: 0.5;
 }
+
+/* alarms */
+
+@keyframes glow-red {
+    0% { fill: rgba(255,0,0,255) !important }
+    100% { fill: rgb(255,0,0); !important}
+}
+
+@-webkit-keyframes glow-red {
+    0% { fill: rgba(255,0,0,255) !important }
+    100% { fill: rgb(255,0,0); !important }
+}
+
+svg .alarm {
+}
+
+svg .alarm.active {
+    /* stroke: red !important; */
+    animation-name: glow-red;
+    animation-duration: 0.5s;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+    animation-direction: alternate;
+    -webkit-animation-name: glow-red;
+    -webkit-animation-duration: 0.5s;
+    -webkit-animation-iteration-count: infinite;
+    -webkit-animation-timing-function: steps(10, end);
+    -webkit-animation-direction: alternate;
+}
+
 
 /* no mouse interaction with inactive zoom levels */
 .zoom {

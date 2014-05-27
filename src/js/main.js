@@ -9,13 +9,13 @@ var Synoptic = window.Synoptic || {};
         var original_svg = d3.select(svg.node().cloneNode(true));
 
         Synoptic.sanitizeSvg(svg);
+        Synoptic.register(svg);
 
         // create the miniature overview
         var view = new Synoptic.View(svg, section);
         view.changed.add(Synoptic.updateActive.bind(this, svg));
         Synoptic.view = view;
 
-        Synoptic.register(svg);
 
         // Create the small overview in the corner
         var thumb = new Synoptic.Thumbnail(view, original_svg);

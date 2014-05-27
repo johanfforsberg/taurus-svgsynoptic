@@ -88,44 +88,55 @@ var Widget = window.Widget || {
         // definitions like e.g. "device=x/y/z". For those found we set
         // the class and data of the parent element accordingly.
         // This makes it convenient to use D3.js to iterate over things.
-        var pattern = /(device|attribute|section)=(.*)/;
+        var pattern = /(device|attribute|section|alarm)=(.*)/;
+
         svg.selectAll("desc")
             .each(function () {
-                var match = pattern.exec(this.textContent);
-                if (match) {
-                    var kind = match[1], name = match[2];
-
-                    // We really want the parent node of the <desc>
-                    d3.select(this.parentNode)
-                        .classed(kind, true)
-                        .data([name])  // set node data to e.g. "a/b/c"
-
-                    // mouse interactions
-                        .on("mouseover", showTooltip)
-                        .on("mousemove", updateTooltip)
-                        .on("mouseout", hideTooltip)
-                        .on("click", function () {
-                            if (d3.event.defaultPrevented) return;
-                            Widget.left_click(kind, name);
-                        })
-                        .on("contextmenu", function () {
-                            if (d3.event.defaultPrevented) return;
-                            Widget.right_click(kind, name);
-                        })
-
-                        .each(function () {_nodes[name] = this;});
-
-                    // register with widget side
-                    Widget.register(kind, name);
-
-                }
+                var lines = this.textContent.split("\n"),
+                    data = {};
+                lines.forEach(function (line) {
+                    var match = pattern.exec(line);
+                    if (match) {
+                        var kind = match[1], name = match[2];
+                        data[kind] = name;
+                        // register with widget side
+                        Widget.register(kind, name);
+                    }
+                }, this);
+                if (data) setupNode(this, data);
             });;
 
     }
 
+    function setupNode(node, data) {
+        // We really want the parent node of the <desc>
+        console.log("setupNode "+ Object.keys(data));
+        var sel = d3.select(node.parentNode)
+            .classed(data)
+            .data([data])
+        // mouse interactions
+            .on("mouseover", showTooltip)
+            .on("mousemove", updateTooltip)
+            .on("mouseout", hideTooltip);
+
+        sel
+            .on("click", function () {
+                if (d3.event.defaultPrevented) return;
+                Object.keys(data).forEach(function (kind) {
+                    Widget.left_click(kind, data[kind]);
+                });
+            })
+            .on("contextmenu", function () {
+                if (d3.event.defaultPrevented) return;
+                Object.keys(data).forEach(function (kind) {
+                    Widget.right_click(kind, data[kind]);
+                });
+            });
+    }
+
     function showTooltip(info) {
         d3.select("#synoptic div.tooltip")
-            .text(info)
+            .text(info.device || info.attribute || info.section)
             .style("visibility", "visible");
     }
 
@@ -141,12 +152,12 @@ var Widget = window.Widget || {
     }
 
     function getNodes(kind, name) {
-        return d3.selectAll("svg ." + kind)
-            .filter(function (d) {return d == name;});
+        return d3.selectAll("#synoptic svg ." + kind)
+            .filter(function (d) {return d[kind] == name;});
     }
 
     // Set the status class of a device
-    var statuses = ["UNKNOWN", "RUNNING", "FAULT", "ON", "OFF", "IN", "OUT"];
+    var statuses = ["UNKNOWN", "RUNNING", "FAULT", "ON", "OFF", "IN", "OUT", "ALARM"];
     function getStatusClasses(status) {
         var classes = {};
         statuses.forEach(function (s) {
@@ -156,17 +167,65 @@ var Widget = window.Widget || {
     };
 
     // Set an attribute value
-    function setAttribute(attrname, value) {
+    function setAttribute(attrname, value_str, type, unit) {
 
         var sel = getNodes("attribute", attrname);
+        console.log("setAttribute " + sel);
 
-        if (/.*\/status/.exec(attrname)) {
+        if (type == "DevBoolean") {
+            var value = parseFloat(value_str) !== 0.0,
+                classes = {"boolean-true": value, "boolean-false": !value};
+            sel.classed(classes);
+        } else if (type == "DevState") {
             // Treat the "Status" attribute specially
-            sel.classed(getStatusClasses(value));
+            sel.classed(getStatusClasses(value_str));
         } else {
-            sel.text(value);
+            sel.text(value_str + (unit? " " + unit: ""));
         }
     };
+
+    // find the name of the layer where a node belongs
+    function getNodeLayer(node) {
+        var parent = node.parentNode;
+        while (!d3.select(parent).classed("layer")) {
+            parent = parent.parentNode;
+        }
+        return d3.select(parent);
+    }
+
+
+    function sendLayerAlarmEvent(node, name, value) {
+        // Not sure this is a great idea, but anyway; let's send out a
+        // custom DOM event on the layer node every time an alarm is
+        // activated within. The point is to decouple things a bit.
+        var layer = getNodeLayer(node);
+        var alarmEvent = new CustomEvent("alarm", {
+            detail: {origin: name, active: value,
+                     layername: layer.attr("id")}
+        });
+        layer.node().dispatchEvent(alarmEvent);
+    }
+
+    // Set an alarm
+    function setAlarm(alarmname, value) {
+        var sel = getNodes("alarm", alarmname);
+        sel.classed("active", value);
+
+        if (sel.node()) {
+            sendLayerAlarmEvent(sel.node(), alarmname, value);
+        }
+    }
+
+    // Kind of a hack...
+    function setSubAlarm(kind, name, value) {
+        var sel = getNodes(kind, name)
+            .classed("alarm", value)
+            .classed("active", value);
+
+        if (sel.node()) {
+            sendLayerAlarmEvent(sel.node(), name, value);
+        }
+    }
 
     // remove all visual selections
     function unselectAllDevices() {
@@ -197,19 +256,19 @@ var Widget = window.Widget || {
         svg.selectAll(".layer:not(.active)").selectAll(".attribute")
             .classed("active", false)
             .each(function (d) {
-                Widget.set_listening(d, false);
+                Widget.set_listening(d.attribute, false);
             });
 
         svg.selectAll(".layer .zoom:not(.active)").selectAll(".attribute")
             .classed("active", false)
             .each(function (d) {
-                Widget.set_listening(d, false);
+                Widget.set_listening(d.attribute, false);
             });
 
         svg.selectAll(".layer.active .zoom.active").selectAll(".attribute")
             .classed("active", function (d) {
                 var visible = isInView(this, bbox);
-                Widget.set_listening(d, visible);
+                Widget.set_listening(d.attribute, visible);
                 return visible;
             });
     }
@@ -239,6 +298,8 @@ var Widget = window.Widget || {
     Synoptic.register = register;
     Synoptic.updateActive = updateActive;
     Synoptic.setAttribute = setAttribute;
+    Synoptic.setAlarm = setAlarm;
+    Synoptic.setDeviceAlarm = setDeviceAlarm;
     Synoptic.unselectAllDevices = unselectAllDevices;
     Synoptic.selectDevice = selectDevice;
 

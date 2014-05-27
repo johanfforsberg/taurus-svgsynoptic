@@ -4,6 +4,7 @@ It allows navigation in the form of zooming, panning and clicking
 various areas to zoom in.
 """
 
+from collections import defaultdict
 import logging
 import os
 
@@ -27,22 +28,19 @@ class JSInterface(QtCore.QObject):
     from the JS side.
     """
 
+    registered = QtCore.pyqtSignal(str, str)
+    visibility = QtCore.pyqtSignal(str, bool)
+    rightclicked = QtCore.pyqtSignal(str, str)
+    leftclicked = QtCore.pyqtSignal(str, str)
     evaljs = QtCore.pyqtSignal(str)
 
-    def __init__(self, frame, click_signal, rightclick_signal,
-                 parent=None, activate_devices=True):
+    def __init__(self, frame, parent=None, activate_devices=True):
 
         self.frame = frame
-        self.click_signal = click_signal
-        self.rightclick_signal = rightclick_signal
         self.activate_devices = activate_devices
 
-        self._devices = dict()
-        self._attributes = dict()
-        self._alarms = dict()
-        self.selected_device = None
-
-        self.panic = panic.api()
+        self.registry = defaultdict(set)
+        self.visible = set()
 
         super(JSInterface, self).__init__(parent)
         self.evaljs.connect(self.evaluate_js)  # thread safety
@@ -51,152 +49,40 @@ class JSInterface(QtCore.QObject):
         print js
         self.frame.evaluateJavaScript(js)
 
-    def device_listener(self, evt_src, evt_type, evt_value):
-
-        #print "thread", threading.current_thread()
-        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-                        PyTango.EventType.CHANGE_EVENT):
-            state = evt_value.value
-            name = evt_src.getNormalName()
-
-            if name:
-                print "device_listener", name
-                device = str(name).rsplit("/", 1)[0]
-                self.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
-                                 (str(device), str(state)))
-
-    def attribute_listener(self, evt_src, evt_type, evt_value):
-        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-                        PyTango.EventType.CHANGE_EVENT):
-            name = evt_src.getNormalName()
-            if name:
-                print "attribute_listener", name
-                fmt = self._attributes[name].getFormat()
-                unit = self._attributes[name].getUnit()
-                value = evt_value.value
-                if evt_value.type is PyTango._PyTango.CmdArgType.DevState:
-                    value_str = str(value)
-                else:
-                    value_str = fmt % value
-                attr_type = str(evt_value.type)
-                self.evaljs.emit("Synoptic.setAttribute(%r, %r, %r, %r)" %
-                                 (name, value_str, attr_type, unit))
-
-    def _set_sub_alarms(self, basename):
-        subalarms = self.panic.get(basename + "*")
-        for alarm in subalarms:
-            devname = alarm.tag.replace("__", "/").replace("_", "-").upper()
-            active = alarm.get_active()
-            #if (devname in self._devices) and (active is not None):
-            if active is not None:
-                self.evaljs.emit("Synoptic.setDeviceAlarm(%r, %s)" %
-                                 (devname, str(bool(active)).lower()))
-
-    def alarm_listener(self, evt_src, evt_type, evt_value):
-        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-                        PyTango.EventType.CHANGE_EVENT):
-            name = evt_src.getNormalName()
-            if name:
-                print "alarm_listener", name
-                alarmname = str(name).rsplit("/", 1)[-1]
-                value = evt_value.value
-                self.evaljs.emit("Synoptic.setAlarm(%r, %s)" % (
-                    alarmname, str(value).lower()))
-                self._set_sub_alarms(alarmname)
-
     @QtCore.pyqtSlot(str, str)
     def left_click(self, kind, name):
-        print "clicked", kind, name
-        if self.click_signal:
-            self.click_signal.emit(kind, name)
+        self.leftclicked.emit(kind, name)
 
     @QtCore.pyqtSlot(str, str)
     def right_click(self, kind, name):
-        print "right clicked", kind, name
-        if self.rightclick_signal:
-            self.rightclick_signal.emit(kind, name)
+        self.rightclicked.emit(kind, name)
 
-    @QtCore.pyqtSlot(str, str, result=bool)
+    @QtCore.pyqtSlot(str, str)
     def register(self, kind, name):
-        mapping = {
-            "device": self._register_device,
-            "attribute": self._register_attribute,
-            "section": self._register_section,
-            "alarm": self._register_alarm
-        }
-        print "registering", kind, name
-        return mapping[str(kind)](str(name))
+        "inform the widget about an item"
+        if name not in self.registry[kind]:
+            self.registry[kind].add(name)
+            self.registered.emit(kind, name)
 
-    def _register_device(self, devname):
-        # TODO: Add check that the device actually exists!
-        if str(devname) in self._devices:
-            return True
-        try:
-            attr = Attribute("%s/State" % str(devname))
-            self._devices[str(devname)] = attr
-            #attr.addListener(self.device_listener)
-            return True
-        except PyTango.DevFailed as df:
-            print "Failed to register device %s: %s" % (devname, df)
-        return False
-
-    def _register_attribute(self, attrname):
-        if attrname in self._attributes:
-            return True
-        try:
-            attr = Attribute(str(attrname))
-            print attr.getFormat()
-            self._attributes[attrname] = attr
-            attr.addListener(self.attribute_listener)
-            print("Registered attribute %s" % attrname)
-            return True
-        except PyTango.DevFailed as df:
-            print "Failed to register attribute %s: %s" % (attrname, df)
-        return False
-
-    def _register_section(self, secname):
-        return True
-
-    def _register_alarm(self, alarmname):
-        """
-        The name of the alarm should be the (beginning of) a device name
-        with "-" replaced by "_" and "/" by "__".
-        """
-        if alarmname in self._alarms:
-            return True
-        try:
-            devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
-            attr = Attribute("%s/%s" % (devname, alarmname))
-            self._alarms[alarmname] = attr
-            #alarm_device = alarmname.replace("__", "/").replace("_", "-")
-            attr.addListener(self.alarm_listener)
-            print("Registered alarm %s" % alarmname)
-            return True
-        except PyTango.DevFailed as df:
-            print "Failed to register alarm %s: %s" % (alarmname, df)
-        return False
-
-    def select_devices(self, devnames):
-        self.evaljs.emit("Synoptic.unselectAllDevices()")
-        for dev in devnames:
-            self.evaljs.emit("Synoptic.selectDevice(%r)" % str(dev))
+    def select(self, kind, names):
+        "set an item as selected"
+        self.evaljs.emit("Synoptic.unselectAll()")
+        for name in names:
+            self.evaljs.emit("Synoptic.select(%r, %r)" %
+                             (str(kind), str(name)))
 
     @QtCore.pyqtSlot(str, bool)
-    def set_listening(self, name, active=True):
-        #print "thread", threading.current_thread()
-        all_items = dict(list(self._devices.items()) +
-                         list(self._attributes.items()))
-        item = all_items.get(str(name))
-        if not item:
-            return
-        if active and not item.isPollingEnabled():
-            print "*** enable %s", name
-            item.enablePolling()
-        elif not active and item.isPollingEnabled():
-            print "*** disable %s", name
-            item.disablePolling()
+    def visible(self, name, value=True):
+        "Update the visibility of something"
+        if value and name not in self.visible:
+            self.visibility.emit(name, value)
+            self.visible.add(name)
+        elif not value and name in self.visible:
+            self.visibility.emit(name, value)
+            self.visible.remove(name)
 
     def load(self, svg, section=None):
+        "Load an SVG file"
         if section:
             self.evaljs.emit("Synoptic.load(%r, %r)" % (svg, section))
         else:
@@ -228,24 +114,22 @@ class SynopticWidget(TaurusWidget):
     here we just connect the JS and python sides up.
     """
 
-    clicked = QtCore.pyqtSignal(str, str)  # e.g. ('device', 'a/b/c')
-    rightClicked = QtCore.pyqtSignal(str, str)
-
-    def __init__(self, svg, section=None, use_tango=True):
-        self.use_tango = use_tango
+    def __init__(self, svg, section=None):
         super(SynopticWidget, self).__init__()
         print "SynopticWidget", svg, section
-        self._setup_ui(svg)
+
+        self.panic = panic.api()
         self.section = section
+        self._setup_ui(svg)
 
     def _setup_ui(self, svg):
         hbox = QtGui.QHBoxLayout(self)
         hbox.setContentsMargins(0, 0, 0, 0)
         hbox.layout().setContentsMargins(0, 0, 0, 0)
-        hbox.addWidget(self.create_view(svg))
+        hbox.addWidget(self._create_view(svg))
         self.setLayout(hbox)
 
-    def create_view(self, svg, use_tango=True):
+    def _create_view(self, svg):
         view = QWebView(self)
         view.setRenderHint(QtGui.QPainter.TextAntialiasing, False)
         view.setPage(LoggingWebPage())
@@ -260,17 +144,139 @@ class SynopticWidget(TaurusWidget):
         def load_svg():
             self.js.load(svg, self.section)
 
-        if self.use_tango:
-            self.js = JSInterface(frame, self.clicked, self.rightClicked)
-            # Inject JSInterface into the JS global namespace as "Widget"
-            view.loadFinished.connect(load_svg)
-            frame.addToJavaScriptWindowObject('Widget', self.js)  # confusing?
-        print "hej"
+        self.js = JSInterface(frame)
+        self.clicked = self.js.leftclicked
+        self.rightClicked = self.js.rightclicked
+        self.js.registered.connect(self._register)
+        self.js.visibility.connect(self._listen)
+
+        # Inject JSInterface into the JS global namespace as "Widget"
+        view.loadFinished.connect(load_svg)
+        frame.addToJavaScriptWindowObject('Widget', self.js)  # confusing?
+
         return view
+
+    def _register(self, kind, name):
+        "Connect an item in the SVG to a corresponding Tango entity"
+        mapping = {
+            "device": self._register_device,
+            "attribute": self._register_attribute,
+            "section": self._register_section,
+            "alarm": self._register_alarm
+        }
+        print "adding Tango listener", kind, name
+        return mapping[str(kind)](str(name))
+
+    def _register_device(self, devname):
+        try:
+            attr = Attribute("%s/State" % str(devname))
+            attr.addListener(self._device_listener)
+        except PyTango.DevFailed as df:
+            print "Failed to register device %s: %s" % (devname, df)
+        return False
+
+    def _register_attribute(self, attrname):
+        try:
+            attr = Attribute(str(attrname))
+            attr.addListener(self._attribute_listener)
+            print("Registered attribute %s" % attrname)
+        except PyTango.DevFailed as df:
+            print "Failed to register attribute %s: %s" % (attrname, df)
+        return False
+
+    def _register_section(self, secname):
+        return True
+
+    def _register_alarm(self, alarmname):
+        """
+        The name of the alarm should be the (beginning of) a device name
+        with "-" replaced by "_" and "/" by "__".
+        """
+        try:
+            devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
+            attr = Attribute("%s/%s" % (devname, alarmname))
+            attr.addListener(self._alarm_listener)
+            print("Registered alarm %s" % alarmname)
+            return True
+        except PyTango.DevFailed as df:
+            print "Failed to register alarm %s: %s" % (alarmname, df)
+        return False
+
+    def _listen(self, name, active):
+        "Turn listening/polling on/off for an attribute"
+        attr = Attribute(name)
+        if active and not attr.isPollingEnabled():
+            print "*** enable %s", name
+            attr.enablePolling()
+        elif not active and attr.isPollingEnabled():
+            print "*** disable %s", name
+            attr.disablePolling()
+
+    ### Listeners ###
+
+    def _device_listener(self, evt_src, evt_type, evt_value):
+
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            state = evt_value.value
+            name = evt_src.getNormalName()
+
+            if name:
+                print "device_listener", name
+                device = str(name).rsplit("/", 1)[0]
+                self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
+                                    (str(device), str(state)))
+
+    def _attribute_listener(self, evt_src, evt_type, evt_value):
+
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            name = evt_src.getNormalName()
+            if name:
+                print "attribute_listener", name
+                attr = Attribute(name)
+                fmt = attr.getFormat()
+                unit = attr.getUnit()
+                value = evt_value.value
+                if evt_value.type is PyTango._PyTango.CmdArgType.DevState:
+                    value_str = str(value)
+                else:
+                    value_str = fmt % value
+                attr_type = str(evt_value.type)
+                self.js.evaljs.emit("Synoptic.setAttribute(%r, %r, %r, %r)" %
+                                    (name, value_str, attr_type, unit))
+
+    def _set_sub_alarms(self, basename):
+        """Find all devices that 'belong' to an alarm and update their
+        alarm status. This is a bit hacky as it depends on alarm names;
+        find a better way."""
+        subalarms = self.panic.get(basename + "*")
+        for alarm in subalarms:
+            devname = alarm.tag.replace("__", "/").replace("_", "-").upper()
+            active = alarm.get_active()
+            #if (devname in self._devices) and (active is not None):
+            if active is not None:
+                self.js.evaljs.emit(
+                    "Synoptic.setSubAlarm(%r, %r, %s)" %
+                    ("device", devname, str(bool(active)).lower()))
+
+    def _alarm_listener(self, evt_src, evt_type, evt_value):
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            name = evt_src.getNormalName()
+            if name:
+                print "alarm_listener", name
+                alarmname = str(name).rsplit("/", 1)[-1]
+                value = evt_value.value
+                self.js.evaljs.emit("Synoptic.setAlarm(%r, %s)" % (
+                    alarmname, str(value).lower()))
+                self._set_sub_alarms(alarmname)
+
+    ### 'Public' API ###
 
     def zoom_to_section(self, secname):
         self.js.evaljs.emit("Synoptic.view.zoomTo('section', %r)"
                             % str(secname))
 
     def select_devices(self, devices):
-        self.js.select_devices(devices)
+        self.js.select('device', devices)

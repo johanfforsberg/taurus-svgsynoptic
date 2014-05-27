@@ -18,10 +18,6 @@ var Widget = window.Widget || {
 
 (function () {
 
-    // keep references to everything found in the SVG in here.
-    // may be premature optimization...
-    var _nodes = {};
-
     // do whatever pruning is needed to make the SVG image work
     // better.
     function sanitizeSvg (svg) {
@@ -228,47 +224,50 @@ var Widget = window.Widget || {
     }
 
     // remove all visual selections
-    function unselectAllDevices() {
+    function unselectAll() {
         d3.selectAll("#synoptic rect.selection")
             .remove();
     }
 
     // visually mark a device as "selected"
-    function selectDevice(devname) {
+    function select(kind, name) {
 
-        var devnode = _nodes[devname],
-            parent = devnode.parentNode,
-            bbox = util.transformedBoundingBox(devnode);
+        var node = getNodes(kind, name).node(),
+            parent = node.parentNode,
+            bbox = util.transformedBoundingBox(node);
 
         d3.select(parent)
-            .insert("svg:rect", function () {return devnode;})
+            .insert("svg:rect", function () {return node;})
             .attr(bbox)
             .classed("selection", true);
     }
 
-    // Check which devices are in view and need to get updates
+    // Check which things are in view and need to get updates
     function _updateActive (svg, bbox) {
 
         console.log("updateActive");
 
         // TODO: Do this in a smarter way...
 
-        svg.selectAll(".layer:not(.active)").selectAll(".attribute")
+        // make sure all is disabled in non-selected layers
+        svg.selectAll(".layer:not(.active) .attribute")
             .classed("active", false)
             .each(function (d) {
-                Widget.set_listening(d.attribute, false);
+                Widget.visible(d.attribute, false);
             });
 
-        svg.selectAll(".layer .zoom:not(.active)").selectAll(".attribute")
+        // disable stuff in invisible zoom levels
+        svg.selectAll(".layer.active > .zoom:not(.active) .attribute")
             .classed("active", false)
             .each(function (d) {
-                Widget.set_listening(d.attribute, false);
+                Widget.visible(d.attribute, false);
             });
 
-        svg.selectAll(".layer.active .zoom.active").selectAll(".attribute")
+        // finally enable things that are in view
+        svg.selectAll(".layer.active > .zoom.active .attribute")
             .classed("active", function (d) {
                 var visible = isInView(this, bbox);
-                Widget.set_listening(d.attribute, visible);
+                Widget.visible(d.attribute, visible);
                 return visible;
             });
     }
@@ -299,8 +298,8 @@ var Widget = window.Widget || {
     Synoptic.updateActive = updateActive;
     Synoptic.setAttribute = setAttribute;
     Synoptic.setAlarm = setAlarm;
-    Synoptic.setDeviceAlarm = setDeviceAlarm;
-    Synoptic.unselectAllDevices = unselectAllDevices;
-    Synoptic.selectDevice = selectDevice;
+    Synoptic.setSubAlarm = setSubAlarm;
+    Synoptic.unselectAll = unselectAll;
+    Synoptic.select = select;
 
 })();

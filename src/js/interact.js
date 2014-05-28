@@ -26,11 +26,13 @@ var Widget = window.Widget || {
         var layers = svg.selectAll("svg > g > g")
                 .filter(function () {
                     return d3.select(this).attr("inkscape:groupmode") == "layer";})
+                .attr("id", function () {
+                    return d3.select(this).attr("inkscape:label");})  // ugh
                 .attr("display", null)
                 .style("display", null);
 
-        // TODO: find a better way to do this; it relies on inkscape specific tags
-        // and hardcoding layer names is not nice either!
+        // TODO: find a better way to do this; it relies on inkscape
+        // specific tags and hardcoding layer names is not nice either!
         layers
             .classed("layer", true);
         layers
@@ -113,9 +115,7 @@ var Widget = window.Widget || {
         // mouse interactions
             .on("mouseover", showTooltip)
             .on("mousemove", updateTooltip)
-            .on("mouseout", hideTooltip);
-
-        sel
+            .on("mouseout", hideTooltip)
             .on("click", function () {
                 if (d3.event.defaultPrevented) return;
                 Object.keys(data).forEach(function (kind) {

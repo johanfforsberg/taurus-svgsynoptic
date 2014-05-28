@@ -111,7 +111,7 @@ class SynopticWidget(TaurusWidget):
     A Qt widget displaying a SVG synoptic in a webview.
 
     Basically all interaction is handled by JS on the webview side,
-    here we just connect the JS and python sides up.
+    here we just connect the JS and Tango sides up.
     """
 
     def __init__(self, svg, section=None):
@@ -135,23 +135,26 @@ class SynopticWidget(TaurusWidget):
         view.setPage(LoggingWebPage())
         view.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
 
+        # load the HTML page that will contain the SVG
         path = os.path.dirname(os.path.realpath(__file__))
-        html = QUrl(os.path.join(path, "index.html"))
-        view.load(html)
-
-        frame = view.page().mainFrame()
+        html = QUrl(os.path.join(path, "index.html"))  # make file configurable
 
         def load_svg():
             self.js.load(svg, self.section)
+        view.loadFinished.connect(load_svg)
+
+        view.load(html)
+        frame = view.page().mainFrame()
 
         self.js = JSInterface(frame)
-        self.clicked = self.js.leftclicked
-        self.rightClicked = self.js.rightclicked
         self.js.registered.connect(self._register)
         self.js.visibility.connect(self._listen)
 
+        # mouse interaction signals
+        self.clicked = self.js.leftclicked
+        self.rightClicked = self.js.rightclicked
+
         # Inject JSInterface into the JS global namespace as "Widget"
-        view.loadFinished.connect(load_svg)
         frame.addToJavaScriptWindowObject('Widget', self.js)  # confusing?
 
         return view
@@ -168,12 +171,13 @@ class SynopticWidget(TaurusWidget):
         return mapping[str(kind)](str(name))
 
     def _register_device(self, devname):
-        try:
-            attr = Attribute("%s/State" % str(devname))
-            attr.addListener(self._device_listener)
-        except PyTango.DevFailed as df:
-            print "Failed to register device %s: %s" % (devname, df)
-        return False
+        pass
+        # try:
+        #     attrname = "%s/State" % str(devname)
+        #     attr = Attribute(attrname)
+        #     attr.addListener(self._device_listener)
+        # except PyTango.DevFailed as df:
+        #     print "Failed to register device %s: %s" % (devname, df)
 
     def _register_attribute(self, attrname):
         try:
@@ -182,10 +186,9 @@ class SynopticWidget(TaurusWidget):
             print("Registered attribute %s" % attrname)
         except PyTango.DevFailed as df:
             print "Failed to register attribute %s: %s" % (attrname, df)
-        return False
 
     def _register_section(self, secname):
-        return True
+        pass
 
     def _register_alarm(self, alarmname):
         """
@@ -194,38 +197,44 @@ class SynopticWidget(TaurusWidget):
         """
         try:
             devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
-            attr = Attribute("%s/%s" % (devname, alarmname))
+            attrname = "%s/%s" % (devname, alarmname)
+            attr = Attribute(attrname)
             attr.addListener(self._alarm_listener)
             print("Registered alarm %s" % alarmname)
-            return True
         except PyTango.DevFailed as df:
             print "Failed to register alarm %s: %s" % (alarmname, df)
-        return False
 
-    def _listen(self, name, active):
-        "Turn listening/polling on/off for an attribute"
-        attr = Attribute(name)
-        if active and not attr.isPollingEnabled():
-            print "*** enable %s", name
-            attr.enablePolling()
-        elif not active and attr.isPollingEnabled():
-            print "*** disable %s", name
-            attr.disablePolling()
+    def _listen(self, name, active=True):
+        """Turn polling on/off for a *registered* attribute This does nothing
+        if events are used, but then there's no need anyway... right?
+
+        Would it be better to add/remove the listeners themselves
+        here? I think that would lead to more overhead but I haven't tested it.
+        """
+        try:
+            attr = Attribute(name)
+            if active and not attr.isPollingEnabled():
+                print "*** enable %s" % name
+                attr.enablePolling()
+            elif not active and attr.isPollingEnabled():
+                print "*** disable %s" % name
+                attr.disablePolling()
+        except PyTango.DevFailed as df:
+            print "Failed to update listener %s: %s" % (name, df)
 
     ### Listeners ###
 
-    def _device_listener(self, evt_src, evt_type, evt_value):
+    # def _device_listener(self, evt_src, evt_type, evt_value):
 
-        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-                        PyTango.EventType.CHANGE_EVENT):
-            state = evt_value.value
-            name = evt_src.getNormalName()
-
-            if name:
-                print "device_listener", name
-                device = str(name).rsplit("/", 1)[0]
-                self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
-                                    (str(device), str(state)))
+    #     if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+    #                     PyTango.EventType.CHANGE_EVENT):
+    #         name = evt_src.getNormalName()
+    #         if name:
+    #             state = evt_value.value
+    #             print "device_listener", name
+    #             device = str(name).rsplit("/", 1)[0]
+    #             self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
+    #                                 (str(device), str(state)))
 
     def _attribute_listener(self, evt_src, evt_type, evt_value):
 
@@ -239,22 +248,23 @@ class SynopticWidget(TaurusWidget):
                 unit = attr.getUnit()
                 value = evt_value.value
                 if evt_value.type is PyTango._PyTango.CmdArgType.DevState:
-                    value_str = str(value)
+                    value_str = str(value)  # e.g. "ON"
                 else:
-                    value_str = fmt % value
+                    value_str = fmt % value  # e.g. "2.40e-5"
                 attr_type = str(evt_value.type)
                 self.js.evaljs.emit("Synoptic.setAttribute(%r, %r, %r, %r)" %
                                     (name, value_str, attr_type, unit))
 
     def _set_sub_alarms(self, basename):
+
         """Find all devices that 'belong' to an alarm and update their
         alarm status. This is a bit hacky as it depends on alarm names;
         find a better way."""
+
         subalarms = self.panic.get(basename + "*")
         for alarm in subalarms:
             devname = alarm.tag.replace("__", "/").replace("_", "-").upper()
             active = alarm.get_active()
-            #if (devname in self._devices) and (active is not None):
             if active is not None:
                 self.js.evaljs.emit(
                     "Synoptic.setSubAlarm(%r, %r, %s)" %

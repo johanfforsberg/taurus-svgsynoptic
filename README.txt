@@ -14,7 +14,7 @@ Note that the widget needs to be in your PYTHONPATH, so doing "export PYTHONPATH
 
 === The SVG file ===
 
-There are some requirements on the SVG file in order for the program to work correctly. They are subject to change.
+There are some requirements on the SVG file in order for the program to work correctly. They are subject to change. (Note that here, the term "layer" is used in the inkscape sense, as well as in the synoptic sense of selectable information layers. Maybe find a different word for the synoptic case?)
 
 - The SVG file must contain exactly one "top" level inkscape layer, which contains all further layers as sublayers.
 
@@ -28,7 +28,7 @@ There are some requirements on the SVG file in order for the program to work cor
 
 - Items not belonging to a "zoom#" layer will always be visible if the layer is visible, regardless of zoom level. Likewise, things drawn directly in the "main" layer will be visible regardless of what layers are activated.
 
-Example:
+Example layer structure:
 
 * main
  * layer1
@@ -36,6 +36,8 @@ Example:
  * layer2
   * zoom0
   * zoom1
+
+Note that in n SVG file, things are drawn in the order they appear in the file, so that later objects come on top of earlier ones. The layer structure in inkscape is shown "upside down" from the real structure (which makes more sense in a drawing program) so that layers higher up are drawn on top of lower layers. Just something to keep in mind; for example it't probably a good idea to put the "background" layer (if any) at the bottom so that it's always behind everything else.
 
 
 === Tango connections ===
@@ -46,9 +48,11 @@ To connect an element to Tango, use the <desc> tag, accessible as "description" 
 
 - To connect to an attribute, the syntax is "attribute=a/b/c/attr". If the element is a text element, this will set the text to be the current value of the attribute (using the Tango format config, and unit if any). If the attribute is "Status", the fill color of the element will be set according to the tango status color scheme. (Not complete)
 
-- It is also possible to specify a "section"; "section=nAme". It does not correspond directly to a tango entity but can be used to quickly zoom in on a specific part of the synoptic. Clicking on a section will zoom the view so that the element takes up the whole view.
+- It is also possible to specify a "section"; "section=name". It does not correspond directly to a tango entity but can be used to quickly zoom in on a specific part of the synoptic. Clicking on a section will zoom the view so that the element takes up the whole view.
 
-Todo: Alarms
+- to specify that an alarm should be connected to the item, use the "alarm=tag" syntax. Whenever that alarm is active, the item will have the "alarm" and "active" classes (typically glow red).
+
+These connections can be used in combination, by putting more than one on its own row in the description. E.g. if you want a device to also show its state using color, add "device=A/B/C" and "attribute=A/B/C/State". A section that should be connected to an alarm: "section=sec1" and "alarm=sec1_alarm", etc.
 
 
 === Gotchas ===
@@ -59,4 +63,4 @@ Todo: Alarms
 
 - SVG transforms on the inkscape layers (main, layer, zoom) can also result in strange effects. It's easy to end up with these inadvertently in inkscape if you try to move things around by selecting the whole image at once. The best way I have found to get rid of such transforms is to manually edit the svg in a text editor, remove any transforms from the <g inkscape:groupmode="layer"> tags. Then you will have to open the file in inkscape again and move things back to their correct places, but make sure you don't select *everything* at the same time. It seems to work better if you only show one layer at a time, then it's OK to select everything and move it in one go.
 
-- In SVG, inline styles take precedence over CSS styles. Therefore, if you want for example the "fill" style of an element to be affected by the class (e.g. if
+- In SVG, inline styles seem to take precedence over CSS styles. Therefore, if you want for example the "fill" style of an element to be affected by the class (e.g. if using the state attribute), it may be necessary to manually remove any "fill" style set by inkscape. This can be done using the built in XMS editor (menu "Edit">"XML Editor...").

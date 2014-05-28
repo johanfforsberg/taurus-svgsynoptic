@@ -5,20 +5,17 @@ var Synoptic = window.Synoptic || {};
     // Start everything up
     var main = function (svg, section) {
 
-        // copy the SVG before we start doing stuff to it
-        var original_svg = d3.select(svg.node().cloneNode(true));
-
+        var svg_copy = d3.select(svg.node().cloneNode(true));
         Synoptic.sanitizeSvg(svg);
         Synoptic.register(svg);
 
-        // create the miniature overview
+        // Create the main view
         var view = new Synoptic.View(svg, section);
         view.changed.add(Synoptic.updateActive.bind(this, svg));
         Synoptic.view = view;
 
-
         // Create the small overview in the corner
-        var thumb = new Synoptic.Thumbnail(view, original_svg);
+        var thumb = new Synoptic.Thumbnail(view, svg_copy);
         //thumb.addMarker("Just a test", 5000, 2200);
 
         var sel = new Synoptic.LayerSelectors();

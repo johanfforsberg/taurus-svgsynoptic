@@ -12,6 +12,7 @@ from PyQt4 import QtCore, QtGui
 from PyQt4.QtCore import QUrl
 from PyQt4.QtWebKit import QWebView, QWebPage
 
+from fandango import CaselessDict
 import panic
 from taurus.qt.qtgui.panel import TaurusWidget
 from taurus import Attribute
@@ -46,7 +47,7 @@ class JSInterface(QtCore.QObject):
         self.evaljs.connect(self.evaluate_js)  # thread safety
 
     def evaluate_js(self, js):
-        print js
+        #print js
         self.frame.evaluateJavaScript(js)
 
     @QtCore.pyqtSlot(str, str)
@@ -74,12 +75,12 @@ class JSInterface(QtCore.QObject):
     @QtCore.pyqtSlot(str, bool)
     def visible(self, name, value=True):
         "Update the visibility of something"
-        if value and name not in self.visible:
-            self.visibility.emit(name, value)
-            self.visible.add(name)
-        elif not value and name in self.visible:
-            self.visibility.emit(name, value)
-            self.visible.remove(name)
+        self.visibility.emit(name, value)
+        # if value and name not in self.visible:
+        #     self.visible.add(name)
+        # elif not value and name in self.visible:
+        #     self.visibility.emit(name, value)
+        #     self.visible.remove(str(name))
 
     def load(self, svg, section=None):
         "Load an SVG file"
@@ -121,6 +122,9 @@ class SynopticWidget(TaurusWidget):
         self.panic = panic.api()
         self.section = section
         self._setup_ui(svg)
+
+        self._attributes = CaselessDict()
+        self._listeners = CaselessDict()
 
     def _setup_ui(self, svg):
         hbox = QtGui.QHBoxLayout(self)
@@ -171,17 +175,22 @@ class SynopticWidget(TaurusWidget):
         return mapping[str(kind)](str(name))
 
     def _register_device(self, devname):
-        pass
-        # try:
-        #     attrname = "%s/State" % str(devname)
-        #     attr = Attribute(attrname)
-        #     attr.addListener(self._device_listener)
-        # except PyTango.DevFailed as df:
-        #     print "Failed to register device %s: %s" % (devname, df)
+        try:
+            attrname = "%s/State" % str(devname)
+            if attrname in self._attributes:
+                return
+            attr = Attribute(attrname)
+            self._attributes[attrname] = attr
+            attr.addListener(self._device_listener)
+        except PyTango.DevFailed as df:
+            print "Failed to register device %s: %s" % (devname, df)
 
     def _register_attribute(self, attrname):
         try:
-            attr = Attribute(str(attrname))
+            if attrname in self._attributes:
+                return
+            attr = Attribute(attrname)
+            self._attributes[attrname] = attr
             attr.addListener(self._attribute_listener)
             print("Registered attribute %s" % attrname)
         except PyTango.DevFailed as df:
@@ -205,36 +214,38 @@ class SynopticWidget(TaurusWidget):
             print "Failed to register alarm %s: %s" % (alarmname, df)
 
     def _listen(self, name, active=True):
-        """Turn polling on/off for a *registered* attribute This does nothing
+        """Turn polling on/off for a *registered* attribute. This does nothing
         if events are used, but then there's no need anyway... right?
 
-        Would it be better to add/remove the listeners themselves
+        Would it be better to somehow  add/remove the listeners themselves
         here? I think that would lead to more overhead but I haven't tested it.
         """
         try:
-            attr = Attribute(name)
+            attr = Attribute(str(name))
             if active and not attr.isPollingEnabled():
                 print "*** enable %s" % name
                 attr.enablePolling()
             elif not active and attr.isPollingEnabled():
                 print "*** disable %s" % name
                 attr.disablePolling()
+        except KeyError:
+            print "No listener to update for %s" % name
         except PyTango.DevFailed as df:
             print "Failed to update listener %s: %s" % (name, df)
 
     ### Listeners ###
 
-    # def _device_listener(self, evt_src, evt_type, evt_value):
+    def _device_listener(self, evt_src, evt_type, evt_value):
 
-    #     if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-    #                     PyTango.EventType.CHANGE_EVENT):
-    #         name = evt_src.getNormalName()
-    #         if name:
-    #             state = evt_value.value
-    #             print "device_listener", name
-    #             device = str(name).rsplit("/", 1)[0]
-    #             self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
-    #                                 (str(device), str(state)))
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            name = evt_src.getNormalName()
+            if name:
+                state = evt_value.value
+                print "device_listener", name
+                device = str(name).rsplit("/", 1)[0]
+                self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
+                                    (str(device), str(state)))
 
     def _attribute_listener(self, evt_src, evt_type, evt_value):
 

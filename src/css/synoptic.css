@@ -7,45 +7,66 @@ svg text {
     pointer-events: none;
 }
 
+svg text.attribute {
+    pointer-events: auto;
+}
+
 /* fade out attributes that aren't being polled */
 svg .attribute {
-    fill: #D0D0D0;
-    opacity: 0.5;
+    opacity: 0.25;
 }
 
 svg .device {
     fill: white;
+    opacity: 0.5;
 }
 
-svg .device.active,.attribute.active {
+svg .device.active {
+    opacity: 1;
+}
+
+svg .attribute.active {
     opacity: 1;
 }
 
 svg .status-UNKNOWN {
-    fill: brown;
+    stroke: white;
+    fill: brown !important;
 }
 
 svg .status-OUT {
-    fill: #FFFFFF;
+    stroke: #808080;
+    fill: #FFFFFF  !important;
 }
 
 svg .status-IN {
-    fill: #00FF00;
+    stroke: #808080;
+    fill: #00FF00 !important;
+}
+
+svg .status-FAULT {
+    stroke: white;
+    fill: red !important;
 }
 
 /* only display "bad" statuses..? */
-svg .status-RUNNING {
+svg :not(.device).status-ON, :not(.device).status_RUNNING {
     visibility: hidden !important;
-    fill: #00A000;
 }
 
-svg .status-ON {
-    visibility: hidden !important;
-    fill: #00FF00;
+svg .status-RUNNING {
+    stroke: #404040;
+    fill: #00A000 !important;
+}
+
+svg .status-ON, .status-ON > * {
+    stroke: #808080;
+    fill: #00FF00 !important;
 }
 
 svg .status-OFF, status-OFF > * {
-    fill: #303030;
+    stroke: white;
+    fill: #303030 !important;
 }
 
 svg .status-ALARM {

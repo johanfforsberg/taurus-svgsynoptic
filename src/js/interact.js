@@ -132,7 +132,11 @@ var Widget = window.Widget || {
 
     function showTooltip(info) {
         d3.select("#synoptic div.tooltip")
-            .text(info.device || info.attribute || info.section)
+            .html(function (d) {
+                return (info.device? "device: " + info.device + "<br>" : "") +
+                    (info.attribute? "attribute: " + info.attribute + "<br>" : "") +
+                    (info.section? "section: " + info.section + "<br>" : "");
+                })
             .style("visibility", "visible");
     }
 
@@ -153,7 +157,7 @@ var Widget = window.Widget || {
     }
 
     // Set the status class of a device
-    var statuses = ["UNKNOWN", "RUNNING", "FAULT", "ON", "OFF", "IN", "OUT", "ALARM"];
+    var statuses = ["UNKNOWN", "RUNNING", "FAULT", "ON", "OFF", "IN", "OUT", "ALARM", "FAULT"];
     function getStatusClasses(status) {
         var classes = {};
         statuses.forEach(function (s) {
@@ -166,7 +170,6 @@ var Widget = window.Widget || {
     function setAttribute(attrname, value_str, type, unit) {
 
         var sel = getNodes("attribute", attrname);
-        console.log("setAttribute " + sel);
 
         if (type == "DevBoolean") {
             var value = parseFloat(value_str) !== 0.0,
@@ -179,6 +182,12 @@ var Widget = window.Widget || {
             sel.text(value_str + (unit? " " + unit: ""));
         }
     };
+
+    function setDeviceStatus(devname, value) {
+        var sel = getNodes("device", devname);
+        sel.classed(getStatusClasses(value));
+    };
+
 
     // find the name of the layer where a node belongs
     function getNodeLayer(node) {
@@ -250,24 +259,24 @@ var Widget = window.Widget || {
         // TODO: Do this in a smarter way...
 
         // make sure all is disabled in non-selected layers
-        svg.selectAll(".layer:not(.active) .attribute")
+        svg.selectAll(".layer:not(.active) .attribute, .layer:not(.active) .device ")
             .classed("active", false)
             .each(function (d) {
-                Widget.visible(d.attribute, false);
+                Widget.visible(d.attribute || (d.device + "/State"), false);
             });
 
         // disable stuff in invisible zoom levels
-        svg.selectAll(".layer.active > .zoom:not(.active) .attribute")
+        svg.selectAll(".layer.active > .zoom:not(.active) .attribute, .layer.active > .zoom:not(.active) .device")
             .classed("active", false)
             .each(function (d) {
-                Widget.visible(d.attribute, false);
+                Widget.visible(d.attribute || (d.device + "/State"), false);
             });
 
         // finally enable things that are in view
-        svg.selectAll(".layer.active > .zoom.active .attribute")
+        svg.selectAll(".layer.active > .zoom.active .attribute, .layer.active > .zoom.active .device")
             .classed("active", function (d) {
                 var visible = isInView(this, bbox);
-                Widget.visible(d.attribute, visible);
+                Widget.visible(d.attribute || (d.device + "/State"), visible);
                 return visible;
             });
     }
@@ -297,6 +306,7 @@ var Widget = window.Widget || {
     Synoptic.register = register;
     Synoptic.updateActive = updateActive;
     Synoptic.setAttribute = setAttribute;
+    Synoptic.setDeviceStatus = setDeviceStatus;
     Synoptic.setAlarm = setAlarm;
     Synoptic.setSubAlarm = setSubAlarm;
     Synoptic.unselectAll = unselectAll;

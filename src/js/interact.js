@@ -86,7 +86,7 @@ var Widget = window.Widget || {
         // definitions like e.g. "device=x/y/z". For those found we set
         // the class and data of the parent element accordingly.
         // This makes it convenient to use D3.js to iterate over things.
-        var pattern = /(device|attribute|section|alarm)=(.*)/;
+        var pattern = /^(device|attribute|section|alarm)=(.*)/;
 
         svg.selectAll("desc")
             .each(function () {
@@ -157,7 +157,7 @@ var Widget = window.Widget || {
     }
 
     // Set the status class of a device
-    var statuses = ["UNKNOWN", "RUNNING", "FAULT", "ON", "OFF", "IN", "OUT", "ALARM", "FAULT"];
+    var statuses = ["UNKNOWN", "RUNNING", "FAULT", "ON", "OFF", "IN", "OUT", "ALARM", "FAULT", "OPEN", "CLOSED"];
     function getStatusClasses(status) {
         var classes = {};
         statuses.forEach(function (s) {

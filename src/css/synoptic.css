@@ -59,7 +59,7 @@ svg .status-RUNNING {
     fill: #00A000 !important;
 }
 
-svg .status-ON, .status-ON > * {
+svg .status-ON, svg .status-OPEN {
     stroke: #808080;
     fill: #00FF00 !important;
 }

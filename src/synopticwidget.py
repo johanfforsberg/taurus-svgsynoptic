@@ -7,12 +7,13 @@ various areas to zoom in.
 from collections import defaultdict
 import logging
 import os
+from threading import Lock
 
 from PyQt4 import QtCore, QtGui
 from PyQt4.QtCore import QUrl
 from PyQt4.QtWebKit import QWebView, QWebPage
 
-from fandango import CaselessDict
+from fandango import CaselessDict, CaselessDefaultDict
 import panic
 from taurus.qt.qtgui.panel import TaurusWidget
 from taurus import Attribute
@@ -115,7 +116,7 @@ class SynopticWidget(TaurusWidget):
     here we just connect the JS and Tango sides up.
     """
 
-    def __init__(self, svg, section=None):
+    def __init__(self, svg, registry, section=None):
         super(SynopticWidget, self).__init__()
         print "SynopticWidget", svg, section
 
@@ -123,8 +124,7 @@ class SynopticWidget(TaurusWidget):
         self.section = section
         self._setup_ui(svg)
 
-        self._attributes = CaselessDict()
-        self._listeners = CaselessDict()
+        self.registry = registry
 
     def _setup_ui(self, svg):
         hbox = QtGui.QHBoxLayout(self)
@@ -151,8 +151,8 @@ class SynopticWidget(TaurusWidget):
         frame = view.page().mainFrame()
 
         self.js = JSInterface(frame)
-        self.js.registered.connect(self._register)
-        self.js.visibility.connect(self._listen)
+        self.js.registered.connect(self.register)
+        self.js.visibility.connect(self.listen)
 
         # mouse interaction signals
         self.clicked = self.js.leftclicked
@@ -163,73 +163,35 @@ class SynopticWidget(TaurusWidget):
 
         return view
 
-    def _register(self, kind, name):
+    def register(self, kind, name):
         "Connect an item in the SVG to a corresponding Tango entity"
         mapping = {
-            "device": self._register_device,
-            "attribute": self._register_attribute,
-            "section": self._register_section,
-            "alarm": self._register_alarm
+            "device": (self.registry.register_device, self._device_listener),
+            "attribute": (self.registry.register_attribute, self._attribute_listener),
+            #"section": (self.registry.register_section, self._section_listener),
+            "alarm": (self.registry.register_alarm, self._alarm_listener)
         }
         print "adding Tango listener", kind, name
-        return mapping[str(kind)](str(name))
+        method, listener = mapping[str(kind)]
+        return method(str(name), listener, id(self))
 
-    def _register_device(self, devname):
-        try:
-            attrname = "%s/State" % str(devname)
-            if attrname in self._attributes:
-                return
-            attr = Attribute(attrname)
-            self._attributes[attrname] = attr
-            attr.addListener(self._device_listener)
-        except PyTango.DevFailed as df:
-            print "Failed to register device %s: %s" % (devname, df)
+    def listen(self, name, active=True):
+        """Turn polling on/off for a registered attribute. This does nothing
+        if events are used, but then there's no need... right?
 
-    def _register_attribute(self, attrname):
-        try:
-            if attrname in self._attributes:
-                return
-            attr = Attribute(attrname)
-            self._attributes[attrname] = attr
-            attr.addListener(self._attribute_listener)
-            print("Registered attribute %s" % attrname)
-        except PyTango.DevFailed as df:
-            print "Failed to register attribute %s: %s" % (attrname, df)
-
-    def _register_section(self, secname):
-        pass
-
-    def _register_alarm(self, alarmname):
-        """
-        The name of the alarm should be the (beginning of) a device name
-        with "-" replaced by "_" and "/" by "__".
+        Note: we don't want to disable polling if there are other
+        listeners, as presumably they are from e.g. panels. Doing that
+        seems to cause trouble (and makes no sense anyway).
         """
         try:
-            devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
-            attrname = "%s/%s" % (devname, alarmname)
-            attr = Attribute(attrname)
-            attr.addListener(self._alarm_listener)
-            print("Registered alarm %s" % alarmname)
-        except PyTango.DevFailed as df:
-            print "Failed to register alarm %s: %s" % (alarmname, df)
-
-    def _listen(self, name, active=True):
-        """Turn polling on/off for a *registered* attribute. This does nothing
-        if events are used, but then there's no need anyway... right?
-
-        Would it be better to somehow  add/remove the listeners themselves
-        here? I think that would lead to more overhead but I haven't tested it.
-        """
-        try:
-            attr = Attribute(str(name))
-            if active and not attr.isPollingEnabled():
-                print "*** enable %s" % name
-                attr.enablePolling()
-            elif not active and attr.isPollingEnabled():
-                print "*** disable %s" % name
-                attr.disablePolling()
-        except KeyError:
-            print "No listener to update for %s" % name
+            if active:
+                # TODO: a nicer way to keep track of different listener types.
+                # Ideally, there should be only one type.
+                self.registry.enable_listener(name, self._attribute_listener, id(self))
+                self.registry.enable_listener(name, self._device_listener, id(self))
+            else:
+                self.registry.disable_listener(name, self._attribute_listener, id(self))
+                self.registry.disable_listener(name, self._device_listener, id(self))
         except PyTango.DevFailed as df:
             print "Failed to update listener %s: %s" % (name, df)
 
@@ -246,6 +208,10 @@ class SynopticWidget(TaurusWidget):
                 device = str(name).rsplit("/", 1)[0]
                 self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
                                     (str(device), str(state)))
+            else:
+                print "***"
+                print "No name for", evt_value
+                print "***"
 
     def _attribute_listener(self, evt_src, evt_type, evt_value):
 
@@ -301,3 +267,83 @@ class SynopticWidget(TaurusWidget):
 
     def select_devices(self, devices):
         self.js.select('device', devices)
+
+
+class Registry(object):
+
+    """A simple registry for attribute callbacks. It makes sure that no
+    duplicate callbacks are registered and also takes care to stop
+    polling if all listeners are disabled.
+
+    It should be treated as a singleton; all synoptic widgets should share
+    the same one, or there will be collisions where they start disabling
+    polling for each other. Not pretty.
+    """
+
+    # keep track of attributes so that we don't add multiple
+    # listeners if they are used more than once
+    _attribute_listeners = CaselessDefaultDict(set)
+    _alarm_listeners = CaselessDefaultDict(set)
+
+    _disabled_listeners = CaselessDefaultDict(set)
+
+    lock = Lock()
+
+    def register_device(self, devname, listener, widget):
+        try:
+            attrname = "%s/State" % str(devname)
+            if widget in self._attribute_listeners[attrname]:
+                return
+            attr = Attribute(attrname)
+            self._attribute_listeners[attrname].add(widget)
+            attr.addListener(listener)
+        except PyTango.DevFailed as df:
+            print "Failed to register device %s: %s" % (devname, df)
+
+    def register_attribute(self, attrname, listener, widget):
+        try:
+            if widget in self._attribute_listeners[attrname]:
+                return
+            attr = Attribute(attrname)
+            self._attribute_listeners[attrname].add(widget)
+            attr.addListener(listener)
+            print("Registered attribute %s" % attrname)
+        except PyTango.DevFailed as df:
+            print "Failed to register attribute %s: %s" % (attrname, df)
+
+    def register_section(self, secname):
+        pass
+
+    def register_alarm(self, alarmname, listener, widget):
+        """
+        The name of the alarm should be the (beginning of) a device name
+        with "-" replaced by "_" and "/" by "__".
+        """
+        try:
+            devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
+            attrname = "%s/%s" % (devname, alarmname)
+            attr = Attribute(attrname)
+            attr.addListener(listener)
+            print("Registered alarm %s" % alarmname)
+        except PyTango.DevFailed as df:
+            print "Failed to register alarm %s: %s" % (alarmname, df)
+
+    def _is_disabled(self, attrname, widget):
+        return (widget in self._attribute_listeners[attrname] and
+                widget in self._disabled_listeners[attrname])
+
+    def disable_listener(self, attrname, listener, widget):
+        with self.lock:
+            if not self._is_disabled(attrname, widget):
+                self._disabled_listeners[attrname].add(widget)
+                # check if anybody is currently interested in the attribute
+                # and if not, we stop polling it
+                if (len(self._disabled_listeners[attrname]) ==
+                    len(self._attribute_listeners[attrname])):
+                    Attribute(attrname).disablePolling()
+
+    def enable_listener(self, attrname, listener, widget):
+        with self.lock:
+            if self._is_disabled(attrname, widget):
+                Attribute(attrname).enablePolling()
+                self._disabled_listeners[attrname].remove(widget)

@@ -1,7 +1,7 @@
 #synoptic #thumbnail .container {
     outline: 2px solid rgba(0,0,0,0.15);
     border: 1px solid #AAA;
-    background: rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.8);
     position: absolute;
     bottom: 5px;
     right: 5px;
@@ -17,7 +17,6 @@
 }
 
 #synoptic #thumbnail svg {
-    opacity: 0.7;
 }
 
 #synoptic #thumbnail svg .layer:not(#background) {

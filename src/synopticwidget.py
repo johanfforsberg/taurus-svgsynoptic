@@ -344,6 +344,7 @@ class Registry(object):
 
     def enable_listener(self, attrname, listener, widget):
         with self.lock:
-            if self._is_disabled(attrname, widget):
+            if widget in self._attribute_listeners[attrname]:
                 Attribute(attrname).enablePolling()
-                self._disabled_listeners[attrname].remove(widget)
+                if widget in self._disabled_listeners[attrname]:
+                    self._disabled_listeners[attrname].remove(widget)

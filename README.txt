@@ -37,20 +37,21 @@ Example layer structure:
   * zoom0
   * zoom1
 
-Note that in n SVG file, things are drawn in the order they appear in the file, so that later objects come on top of earlier ones. The layer structure in inkscape is shown "upside down" from the real structure (which makes more sense in a drawing program) so that layers higher up are drawn on top of lower layers. Just something to keep in mind; for example it't probably a good idea to put the "background" layer (if any) at the bottom so that it's always behind everything else.
+Note that in n SVG file, things are drawn in the order they appear in the file, so that later objects come on top of earlier ones. The layer structure in inkscape is shown "upside down" from the real structure (which makes more sense in a drawing program) so that layers higher up are drawn on top of lower layers. Just something to keep in mind; for example it't probably a good idea to put the "background" layer (if any) at the bottom so that it's always drawn behind everything else.
 
 
 === Tango connections ===
 
 To connect an element to Tango, use the <desc> tag, accessible as "description" in the "Object Properties" dialog in Inkscape. It should be possible to connect any element or group of elements, including clones (<use> tags).
 
-- To connect to a device, the syntax is "device=a/b/c". Right clicking the device should bring up a new window with an appropriate panel. (Needs specific programming for now).
+- To connect to a device, the syntax is "device=a/b/c". This will automatically connect the element to the "Status" attribute of the device, which means that the color of the element gets set to the appropriate Tango status color.
+(Note: here the CSS contra hard-coded style plays an important role; if it is a simple element (e.g. a circle) that you are using, overriding the fill color should just work, but if it's a group, the fill will be set on the *group* element. This means that hardcoded colors in the SVG won't be overridden, but if you make sure there's no "fill" style on the element itself (it should show up as black in inkscape) it should inherit the fill color from the parent group and all will be fine. This can be exploited, e.g. if you only want part of your symbol to be colored for status, for example a "lamp" somewhere). Clicks on devices will cause the widget to emit "clicked" or "rightClicked" signals.
 
-- To connect to an attribute, the syntax is "attribute=a/b/c/attr". If the element is a text element, this will set the text to be the current value of the attribute (using the Tango format config, and unit if any). If the attribute is "Status", the fill color of the element will be set according to the tango status color scheme. (Not complete)
+- To connect directly to an attribute, the syntax is "attribute=a/b/c/attr". If the element is a text element, this will set the text to be the current value of the attribute (using the Tango format config, and unit if any). If the attribute is "Status", the fill color of the element will be set according to the tango status color scheme. (See above). There will certainly be needs for more specific support for various types here.
 
 - It is also possible to specify a "section"; "section=name". It does not correspond directly to a tango entity but can be used to quickly zoom in on a specific part of the synoptic. Clicking on a section will zoom the view so that the element takes up the whole view.
 
-- to specify that an alarm should be connected to the item, use the "alarm=tag" syntax. Whenever that alarm is active, the item will have the "alarm" and "active" classes (typically glow red).
+- to specify that an alarm should be connected to the item, use the "alarm=tag" syntax. Whenever that alarm is active, the item will have the "alarm" and "active" classes (default: pulsating red glow). There is currently some hacky logic to automatically support sub-alarms (e.g. alarms on individual devices) but it is sort of impractical ATM. Manually adding all alarms is tedious, though, so we need to figure out a good solution here.
 
 These connections can be used in combination, by putting more than one on its own row in the description. E.g. if you want a device to also show its state using color, add "device=A/B/C" and "attribute=A/B/C/State". A section that should be connected to an alarm: "section=sec1" and "alarm=sec1_alarm", etc.
 
@@ -63,4 +64,4 @@ These connections can be used in combination, by putting more than one on its ow
 
 - SVG transforms on the inkscape layers (main, layer, zoom) can also result in strange effects. It's easy to end up with these inadvertently in inkscape if you try to move things around by selecting the whole image at once. The best way I have found to get rid of such transforms is to manually edit the svg in a text editor, remove any transforms from the <g inkscape:groupmode="layer"> tags. Then you will have to open the file in inkscape again and move things back to their correct places, but make sure you don't select *everything* at the same time. It seems to work better if you only show one layer at a time, then it's OK to select everything and move it in one go.
 
-- In SVG, inline styles seem to take precedence over CSS styles. Therefore, if you want for example the "fill" style of an element to be affected by the class (e.g. if using the state attribute), it may be necessary to manually remove any "fill" style set by inkscape. This can be done using the built in XMS editor (menu "Edit">"XML Editor...").
+- In SVG, inline styles seem to generally take precedence over CSS styles. Therefore, if you want for example the "fill" style of an element to be affected by the class (e.g. if using the State attribute), it may be necessary to manually remove any "fill" style set by inkscape. This can be done using the built in XMS editor (menu "Edit">"XML Editor..."). Look for the "style" tag and remove any "fill:whatever" (if fill color is what you want to change). The element will bre drawn completely black if there is no specified fill.

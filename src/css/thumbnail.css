@@ -13,7 +13,7 @@
     pointer-events: none;
     position: absolute;
     border: 1px solid #555;
-    outline: 2px solid rgba(200,180,0,0.5);
+    outline: 2px solid rgba(0,200,0,0.5);
 }
 
 #synoptic #thumbnail svg {

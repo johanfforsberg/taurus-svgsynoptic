@@ -157,7 +157,9 @@ var Widget = window.Widget || {
     }
 
     // Set the status class of a device
-    var statuses = ["UNKNOWN", "RUNNING", "FAULT", "ON", "OFF", "IN", "OUT", "ALARM", "FAULT", "OPEN", "CLOSED"];
+    var statuses = ["UNKNOWN", "INIT", "RUNNING", "MOVING",
+                    "ON", "OFF", "INSERT", "EXTRACT", "OPEN", "CLOSE",
+                    "STANDBY", "ALARM", "FAULT", "DISABLE"];
     function getStatusClasses(status) {
         var classes = {};
         statuses.forEach(function (s) {
@@ -226,6 +228,7 @@ var Widget = window.Widget || {
         var sel = getNodes(kind, name)
             .classed("alarm", value)
             .classed("active", value);
+        console.log("setSubAlarm " + name + " " + sel);
 
         if (sel.node()) {
             sendLayerAlarmEvent(sel.node(), name, value);

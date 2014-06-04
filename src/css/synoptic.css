@@ -17,7 +17,7 @@ svg .attribute {
 }
 
 svg .device {
-    fill: white;
+    fill: rgb(128,128,128);
     opacity: 0.5;
 }
 
@@ -29,19 +29,33 @@ svg .attribute.active {
     opacity: 1;
 }
 
+/* === Tango states === */
+
 svg .status-UNKNOWN {
     stroke: white;
-    fill: brown !important;
+    fill: rgb(128,128,128) !important;
 }
 
-svg .status-OUT {
-    stroke: #808080;
-    fill: #FFFFFF  !important;
+svg .status-INIT {
+    fill: rgb(204,204,122) !important;
 }
 
-svg .status-IN {
+svg .status-DISABLE {
+    fill: rgb(255,0,255) !important;
+}
+
+svg .status-STANDBY {
+    fill: rgb(255,255,0) !important;
+}
+
+svg .status-ON, svg .status-OPEN, svg .status-EXTRACT {
     stroke: #808080;
     fill: #00FF00 !important;
+}
+
+svg .status-OFF, svg .status-CLOSE, svg .status-INSERT {
+    stroke: grey;
+    fill: white !important;
 }
 
 svg .status-FAULT {
@@ -49,29 +63,19 @@ svg .status-FAULT {
     fill: red !important;
 }
 
-/* only display "bad" statuses..? */
-svg :not(.device).status-ON, :not(.device).status_RUNNING {
-    visibility: hidden !important;
-}
-
-svg .status-RUNNING {
-    stroke: #404040;
-    fill: #00A000 !important;
-}
-
-svg .status-ON, svg .status-OPEN {
-    stroke: #808080;
-    fill: #00FF00 !important;
-}
-
-svg .status-OFF, status-OFF > * {
-    stroke: white;
-    fill: #303030 !important;
+svg .status-RUNNING, svg .status-MOVING {
+    fill: rgb(128,160,255) !important;
 }
 
 svg .status-ALARM {
-    fill: #FF6000 !important;
+    stroke: white;
+    fill: rgb(255,140,0) !important;
 }
+
+/* only display "bad" statuses..? */
+/* svg :not(.device).status-ON, :not(.device).status_RUNNING { */
+/*     visibility: hidden !important; */
+/* } */
 
 /* device selection rectangle */
 svg rect.selection {

@@ -99,16 +99,16 @@ svg .alarm {
 
 svg .alarm.active {
     /* stroke: red !important; */
-    animation-name: glow-red;
-    animation-duration: 0.5s;
-    animation-iteration-count: infinite;
-    animation-timing-function: ease-in-out;
-    animation-direction: alternate;
-    -webkit-animation-name: glow-red;
-    -webkit-animation-duration: 0.5s;
-    -webkit-animation-iteration-count: infinite;
-    -webkit-animation-timing-function: steps(10, end);
-    -webkit-animation-direction: alternate;
+    animation-name: glow-red !important;
+    animation-duration: 0.5s !important;
+    animation-iteration-count: infinite !important;
+    animation-timing-function: ease-in-out !important;
+    animation-direction: alternate !important;
+    -webkit-animation-name: glow-red !important;
+    -webkit-animation-duration: 0.5s !important;
+    -webkit-animation-iteration-count: infinite !important;
+    -webkit-animation-timing-function: steps(10, end) !important;
+    -webkit-animation-direction: alternate !important;
 }
 
 

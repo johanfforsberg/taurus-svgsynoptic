@@ -36,13 +36,9 @@ class JSInterface(QtCore.QObject):
     leftclicked = QtCore.pyqtSignal(str, str)
     evaljs = QtCore.pyqtSignal(str)
 
-    def __init__(self, frame, parent=None, activate_devices=True):
+    def __init__(self, frame, parent=None):
 
         self.frame = frame
-        self.activate_devices = activate_devices
-
-        self.registry = defaultdict(set)
-        self.visible = set()
 
         super(JSInterface, self).__init__(parent)
         self.evaljs.connect(self.evaluate_js)  # thread safety
@@ -62,9 +58,8 @@ class JSInterface(QtCore.QObject):
     @QtCore.pyqtSlot(str, str)
     def register(self, kind, name):
         "inform the widget about an item"
-        if name not in self.registry[kind]:
-            self.registry[kind].add(name)
-            self.registered.emit(kind, name)
+        #self.registry[kind].add(name)
+        self.registered.emit(kind, name)
 
     def select(self, kind, names):
         "set an item as selected"
@@ -77,11 +72,6 @@ class JSInterface(QtCore.QObject):
     def visible(self, name, value=True):
         "Update the visibility of something"
         self.visibility.emit(name, value)
-        # if value and name not in self.visible:
-        #     self.visible.add(name)
-        # elif not value and name in self.visible:
-        #     self.visibility.emit(name, value)
-        #     self.visible.remove(str(name))
 
     def load(self, svg, section=None):
         "Load an SVG file"
@@ -120,7 +110,6 @@ class SynopticWidget(TaurusWidget):
         super(SynopticWidget, self).__init__()
         print "SynopticWidget", svg, section
 
-        self.panic = panic.api()
         self.section = section
         self._setup_ui(svg)
 
@@ -172,8 +161,9 @@ class SynopticWidget(TaurusWidget):
             "alarm": (self.registry.register_alarm, self._alarm_listener)
         }
         print "adding Tango listener", kind, name
-        method, listener = mapping[str(kind)]
-        return method(str(name), listener, id(self))
+        method, listener = mapping.get(str(kind), (None, None))
+        if method and listener:
+            return method(str(name), listener, id(self))
 
     def listen(self, name, active=True):
         """Turn polling on/off for a registered attribute. This does nothing
@@ -189,13 +179,15 @@ class SynopticWidget(TaurusWidget):
                 # Ideally, there should be only one type.
                 self.registry.enable_listener(name, self._attribute_listener, id(self))
                 self.registry.enable_listener(name, self._device_listener, id(self))
+                self.registry.enable_listener(name, self._alarm_listener, id(self))
             else:
                 self.registry.disable_listener(name, self._attribute_listener, id(self))
                 self.registry.disable_listener(name, self._device_listener, id(self))
+                self.registry.disable_listener(name, self._alarm_listener, id(self))
         except PyTango.DevFailed as df:
             print "Failed to update listener %s: %s" % (name, df)
 
-    ### Listeners ###
+    ### Listener callbacks ###
 
     def _device_listener(self, evt_src, evt_type, evt_value):
 
@@ -238,11 +230,12 @@ class SynopticWidget(TaurusWidget):
         alarm status. This is a bit hacky as it depends on alarm names;
         find a better way."""
 
-        subalarms = self.panic.get(basename + "*")
+        subalarms = self.registry.panic.get(basename + "*")
         for alarm in subalarms:
             devname = alarm.tag.replace("__", "/").replace("_", "-").upper()
             active = alarm.get_active()
             if active is not None:
+                print "subalarm on", devname, active
                 self.js.evaljs.emit(
                     "Synoptic.setSubAlarm(%r, %r, %s)" %
                     ("device", devname, str(bool(active)).lower()))
@@ -271,9 +264,9 @@ class SynopticWidget(TaurusWidget):
 
 class Registry(object):
 
-    """A simple registry for attribute callbacks. It makes sure that no
+    """A simple 'registry' for attribute callbacks. It makes sure that no
     duplicate callbacks are registered and also takes care to stop
-    polling if all listeners are disabled.
+    polling an attribute if all its listeners are disabled.
 
     It should be treated as a singleton; all synoptic widgets should share
     the same one, or there will be collisions where they start disabling
@@ -288,6 +281,7 @@ class Registry(object):
     _disabled_listeners = CaselessDefaultDict(set)
 
     lock = Lock()
+    panic = panic.api()
 
     def register_device(self, devname, listener, widget):
         try:
@@ -322,7 +316,10 @@ class Registry(object):
         try:
             devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
             attrname = "%s/%s" % (devname, alarmname)
+            if widget in self._attribute_listeners[attrname]:
+                return
             attr = Attribute(attrname)
+            self._attribute_listeners[attrname].add(widget)
             attr.addListener(listener)
             print("Registered alarm %s" % alarmname)
         except PyTango.DevFailed as df:

@@ -8,7 +8,7 @@ svg text {
 }
 
 svg text.attribute {
-    pointer-events: auto;
+    pointer-events: visible;
 }
 
 /* fade out attributes that aren't being polled */
@@ -78,7 +78,7 @@ svg .status-ALARM {
 /* } */
 
 /* device selection rectangle */
-svg rect.selection {
+svg .selection {
     fill: grey;
     stroke: grey;
     stroke-width: 10px;
@@ -117,12 +117,12 @@ svg .alarm.active {
 
 
 /* no mouse interaction with inactive zoom levels */
-.zoom {
+g.zoom {
     pointer-events: none;
     display: none;
 }
 
-.zoom.active {
+g.zoom.active {
     pointer-events: auto;
     display: inline;
 }

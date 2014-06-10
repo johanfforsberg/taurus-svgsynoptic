@@ -5,8 +5,8 @@ var Synoptic = window.Synoptic || {};
     // Start everything up
     var main = function (svg, section) {
 
-        var svg_copy = d3.select(svg.node().cloneNode(true));
         Synoptic.sanitizeSvg(svg);
+        var svg_copy = d3.select(svg.node().cloneNode(true));
         Synoptic.register(svg);
 
         // Create the main view

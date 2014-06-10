@@ -21,9 +21,9 @@ var Synoptic = window.Synoptic || Synoptic;
         container.style("height", cont_h);
 
         // only show zoom level 0 of the background layer
-        thumb.selectAll("g.layer g.zoom")
+        thumb.selectAll(".layer .zoom")
             .style("display", "none");
-        thumb.selectAll("#background g.zoom.level0")
+        thumb.select("#background g.zoom.level0")
             .style("display", "inline");
 
         // insert the thumbnail into the page

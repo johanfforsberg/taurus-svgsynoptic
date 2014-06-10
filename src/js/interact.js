@@ -237,7 +237,7 @@ var Widget = window.Widget || {
 
     // remove all visual selections
     function unselectAll() {
-        d3.selectAll("#synoptic rect.selection")
+        d3.selectAll("#synoptic .selection")
             .remove();
     }
 
@@ -249,8 +249,12 @@ var Widget = window.Widget || {
             bbox = util.transformedBoundingBox(node);
 
         d3.select(parent)
-            .insert("svg:rect", function () {return node;})
-            .attr(bbox)
+            //.insert("svg:rect", function () {return node;})
+            .insert("svg:ellipse", function () {return node;})
+            .attr("cx", bbox.x + bbox.width/2)
+            .attr("cy", bbox.y + bbox.height/2)
+            .attr("rx", bbox.width * 0.75)
+            .attr("ry", bbox.height * 0.75)
             .classed("selection", true);
     }
 

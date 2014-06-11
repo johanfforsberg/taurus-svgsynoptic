@@ -4,21 +4,18 @@ It allows navigation in the form of zooming, panning and clicking
 various areas to zoom in.
 """
 
-from collections import defaultdict
 import logging
 import os
 from threading import Lock
 
-from PyQt4 import QtCore, QtGui
-from PyQt4.QtCore import QUrl
-from PyQt4.QtWebKit import QWebView, QWebPage
-
-from fandango import CaselessDict, CaselessDefaultDict
+from fandango import CaselessDefaultDict
 import panic
+from PyQt4.QtWebKit import QWebView, QWebPage
+import PyTango
+from taurus.qt import QtCore, QtGui
+from taurus.qt.QtCore import QUrl
 from taurus.qt.qtgui.panel import TaurusWidget
 from taurus import Attribute
-
-import PyTango
 
 
 class JSInterface(QtCore.QObject):
@@ -58,7 +55,6 @@ class JSInterface(QtCore.QObject):
     @QtCore.pyqtSlot(str, str)
     def register(self, kind, name):
         "inform the widget about an item"
-        #self.registry[kind].add(name)
         self.registered.emit(kind, name)
 
     def select(self, kind, names):

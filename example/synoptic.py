@@ -5,7 +5,7 @@ from taurus.qt.qtgui.application import TaurusApplication
 from taurus.qt.qtgui.panel import TaurusDevicePanel
 import PyTango
 
-from synopticwidget import SynopticWidget, Registry
+from svgsynoptic import SynopticWidget, Registry
 
 """An example of using the SVG synoptic widget."""
 

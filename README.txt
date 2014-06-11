@@ -1,9 +1,11 @@
-This is a synoptic widget based on the SVG format. There is a demonstration program in the "linac" directory that can be started like so:
+This is a synoptic widget based on the SVG format. There is a demonstration program in the "example" directory that can be started like so:
 
   cd linac/
-  python synoptic.py full/path/to/maxiv.svg
+  python synoptic.py full/path/to/example.svg
 
 Note that the widget needs to be in your PYTHONPATH, so doing "export PYTHONPATH=/full/path/to/app-maxiv-svgsynoptic/src" before may help.
+
+Also, the example assumes a sys/tg_test/1 TangoTest device in order to actually do anything.
 
 
 === Requirements ===

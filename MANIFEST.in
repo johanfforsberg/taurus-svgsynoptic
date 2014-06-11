@@ -1,0 +1,3 @@
+include src/index.html
+recursive-include src/js *
+recursive-include src/css *

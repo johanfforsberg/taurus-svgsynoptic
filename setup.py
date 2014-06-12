@@ -12,5 +12,5 @@ setup(
     url="http://www.maxlab.lu.se",
     packages=['svgsynoptic'],
     package_dir={'svgsynoptic': 'src'},
-    include_package_data=True
+    package_data={'svgsynoptic': ['index.html', 'js/*.js', 'js/libs/*.js', 'css/*.css']}
 )

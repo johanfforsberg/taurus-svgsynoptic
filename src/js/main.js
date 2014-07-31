@@ -11,7 +11,7 @@ var Synoptic = window.Synoptic || {};
 
         // Create the main view
         var view = new Synoptic.View(svg, section);
-        view.changed.add(Synoptic.updateActive.bind(this, svg));
+        view.changed.add(function (bb) {Synoptic.updateActive(svg, bb);});
         Synoptic.view = view;
 
         // Create the small overview in the corner

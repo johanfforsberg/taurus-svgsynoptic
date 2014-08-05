@@ -18,8 +18,8 @@ var Widget = window.Widget || {
 
 (function () {
 
-    // do whatever pruning is needed to make the SVG image work
-    // better.
+    // do whatever pruning and rewriting is needed to make the SVG image work
+    // better for our purposes.
     function sanitizeSvg (svg) {
 
         // Setup all the layers that should be user selectable
@@ -31,6 +31,7 @@ var Widget = window.Widget || {
                 .attr("display", null)
                 .style("display", null);
 
+        // Set which layers are selectable
         // TODO: find a better way to do this; it relies on inkscape
         // specific tags and hardcoding layer names is not nice either!
         layers

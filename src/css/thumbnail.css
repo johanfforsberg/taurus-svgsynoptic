@@ -23,10 +23,18 @@
     visibility: hidden;
 }
 
-.marker {
+.warning-marker {
     fill: none;
     stroke: red;
     stroke-width: 200px;
+}
+
+.marker {
+    fill: blue;
+    stroke: white;
+    stroke-width: 100px;
+    opacity: .5;
+    stroke: none;
 }
 
 button.thumbnail {

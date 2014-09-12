@@ -14,7 +14,7 @@
    height="1800"
    id="svg19642"
    version="1.1"
-   inkscape:version="0.48+devel r"
+   inkscape:version="0.48.4 r9939"
    viewbox="0 0 222 177"
    preserveAspectRatio="xMinYMin meet"
    sodipodi:docname="example.svg">
@@ -41,10 +41,10 @@
      inkscape:cx="193.45073"
      inkscape:cy="1509.9531"
      inkscape:document-units="px"
-     inkscape:current-layer="layer5"
+     inkscape:current-layer="layer10"
      showgrid="false"
-     inkscape:window-width="1920"
-     inkscape:window-height="1163"
+     inkscape:window-width="1366"
+     inkscape:window-height="731"
      inkscape:window-x="0"
      inkscape:window-y="37"
      inkscape:window-maximized="0"
@@ -140,7 +140,7 @@
            width="100%"
            height="100%">
           <desc
-             id="desc7666">device=sys/mag/ps-1</desc>
+             id="desc7666">device=sys/tg_test/1</desc>
         </use>
         <use
            height="100%"
@@ -152,7 +152,7 @@
            x="0"
            style="display:inline">
           <desc
-             id="desc7690">device=sys/mag/ps1</desc>
+             id="desc7690">device=sys/tg_test/1</desc>
         </use>
       </g>
     </g>
@@ -201,7 +201,7 @@
            y="0"
            x="0">
           <desc
-             id="desc7694">device=sys/test/1</desc>
+             id="desc7694">device=sys/tg_test/1</desc>
         </use>
         <use
            height="100%"
@@ -271,7 +271,7 @@
            transform="matrix(0.30926733,0,0,0.30205107,126.30629,150.50298)"
            inkscape:transform-center-y="-0.097513881"
            inkscape:transform-center-x="1.7222146"
-           d="M 196.22597,385.00847 90.423074,372.06856 154.53081,286.91052 Z"
+           d="M 196.22597,385.00847 90.423074,372.06856 154.53081,286.91052 z"
            inkscape:randomized="0"
            inkscape:rounded="0"
            inkscape:flatsided="true"
@@ -313,7 +313,7 @@
            cx="277.31845"
            id="path9108"
            style="fill-opacity:1;stroke:#000000;stroke-width:1.25;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
-           d="m 285.05243,251.54663 a 7.7339807,4.9718447 0 0 1 -7.73398,4.97185 7.7339807,4.9718447 0 0 1 -7.73398,-4.97185 7.7339807,4.9718447 0 0 1 7.73398,-4.97184 7.7339807,4.9718447 0 0 1 7.73398,4.97184 z" />
+           d="m 285.05243,251.54663 c 0,2.74587 -3.46262,4.97185 -7.73398,4.97185 -4.27136,0 -7.73398,-2.22598 -7.73398,-4.97185 0,-2.74587 3.46262,-4.97184 7.73398,-4.97184 4.27136,0 7.73398,2.22597 7.73398,4.97184 z" />
       </g>
     </g>
   </g>

@@ -147,3 +147,20 @@ svg #symbols {
 svg text {
     background: yellow;
 }
+
+#bookmarks {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+/* #bookmarks button.add { */
+/*     background-color: yellow; */
+/* } */
+
+#bookmarks div.bookmark {
+    background-color: rgba(200,200,200,0.5);
+    padding: 3px;
+    margin: 2px;
+    text-align: center;
+}

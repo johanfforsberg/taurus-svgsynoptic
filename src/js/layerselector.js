@@ -17,6 +17,7 @@ var Synoptic = window.Synoptic || {};
 
         // create a button for each layer in the SVG
         var layers = d3.selectAll("svg.view .layer.selectable");
+
         layers.each(function () {
             var name = d3.select(this).attr("inkscape:label");
             d3.select(this).attr("id", name);  // a hack to be able to

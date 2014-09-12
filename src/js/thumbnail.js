@@ -83,26 +83,41 @@ var Synoptic = window.Synoptic || Synoptic;
 
     }
 
-    Thumbnail.prototype.addMarker = function (name, x, y) {
-        var marker = this.svg
+    var markers = {};
+
+    Thumbnail.prototype.addMarker = function (name, x, y, warning) {
+        var marker = this.thumb
             .append("circle")
-            .classed("marker", true)
             .attr("cx", x)
             .attr("cy", y);
-
-        // blink it
-        window.setInterval(function () {
+        markers[name] = marker;
+        if (warning) {
+            // blink it
+            marker.classed("warning-marker", true);
+            window.setInterval(function () {
+                marker
+                    .attr("r", 100)
+                    .attr("opacity", 1)
+                    .transition()
+                    .duration(900).ease("linear")
+                    .attr("r", 1000)
+                    .attr("opacity", 0);
+            }, 3000);
+        } else {
             marker
-                .attr("r", 100)
-                .attr("opacity", 1)
-                .transition()
-                .duration(900).ease("linear")
-                .attr("r", 1000)
-                .attr("opacity", 0);
-        }, 3000);
+                .classed("marker", true)
+                .attr("r", 50);
+        }
+    };
+
+    Thumbnail.prototype.deleteMarker = function (name) {
+        var marker = markers[name];
+        console.log("marker " + marker);
+        if (marker) {
+            marker.remove();
+        }
     };
 
     Synoptic.Thumbnail = Thumbnail;
-
 
 })();

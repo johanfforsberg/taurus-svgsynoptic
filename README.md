@@ -3,7 +3,8 @@ This is a Taurus synoptic widget based on the SVG format. It does roighly the sa
 Note: this is an early version and things are very likely to change. Don't use if for something serious unless you are prepared for this...
 
 
-=== Example ===
+Example
+-------
 
 There is a demonstration program in the "example" directory that can be started like so:
 
@@ -14,7 +15,8 @@ The example assumes a Tango installation and a running default TangoTest device 
 "synoptic.py" demonstrates how the widget might be used in an application, connecting mouse clicks to different functionality, etc. "example.svg" can serve as basis for building an SVG file. See below for various caveats.
 
 
-=== Requirements ===
+Requirements
+------------
 
 - Taurus (and its dependencies Qt, PyQt, PyTango, etc)
 - Qt version > 4.7 (not sure exactly which version, but older versions have some incompatibility regarding QWebView)
@@ -22,29 +24,31 @@ The example assumes a Tango installation and a running default TangoTest device 
 - Panic/PyAlarm (this should be removed as a hard requirement)
 
 
-=== TODO ===
+TODO
+----
 
 This is still an early version. Some things that need attention:
 
- - More flexible ways of displaying information. The tooltips for example are extremely simple (they only display the static information, e.g. device/attribute name).
+- More flexible ways of displaying information. The tooltips for example are extremely simple (they only display the static information, e.g. device/attribute name).
 
- - Alarm handling. Currently very rudimentary. Possibly, the actual handling should be kept out of the widget itself, to allow connection to different alarm systems.
+- Alarm handling. Currently very rudimentary. Possibly, the actual handling should be kept out of the widget itself, to allow connection to different alarm systems.
 
- - Performance. The widget has been in use for a while now and we currently have 140 devices and 20 attributes in a single synoptic. So far there haven't been any particular performance issues apart from somewhat slow startup. The widget tries to keep track of the currently visible elements and prevent polling on things not in view, but there may be better ways to handle this.
+- Performance. The widget has been in use for a while now and we currently have 140 devices and 20 attributes in a single synoptic. So far there haven't been any particular performance issues apart from somewhat slow startup. The widget tries to keep track of the currently visible elements and prevent polling on things not in view, but there may be better ways to handle this.
 
- - Drawing. There are currently various pitfalls in the procedure of making a synoptic (see below) This needs to be streamlined.
+- Drawing. There are currently various pitfalls in the procedure of making a synoptic (see below) This needs to be streamlined.
 
- - Taurusification. Currently it's technically a Taurus widget, but it's not configurable through a config.py file for example.
-
-
-Loose ideas/long-term plans:
-
- - Make a web backend. This should be straightforward since the synoptic is already implemented as a webpage.
-
- - More ways of navigation, e.g. search, bookmarks, etc.
+- Taurusification. Currently it's technically a Taurus widget, but it's not configurable through a config.py file for example.
 
 
-=== The SVG file ===
+### Loose ideas/long-term plans:
+
+- Make a web backend. This should be straightforward since the synoptic is already implemented as a webpage.
+
+- More ways of navigation, e.g. search, bookmarks, etc.
+
+
+The SVG file
+------------
 
 There are some requirements on the SVG file in order for the program to work correctly. They are subject to change. (Note that below, the term "layer" is used in the inkscape sense, as well as in the synoptic sense of selectable information layers. Maybe find a different word for the synoptic case?)
 
@@ -67,19 +71,19 @@ I have been using Inkscape as an SVG editor and it's almost a requirement right 
 Example layer structure:
 
 * main
- * layer1
-  * zoom0
- * layer2
-  * zoom0
-  * zoom1
- * background
-  * zoom0
- * symbols
+  * layer1
+    * zoom0
+  * layer2
+    * zoom0
+    * zoom1
+  * background
+    * zoom0
+  * symbols
 
 Note that in n SVG file, things are drawn in the order they appear in the file, so that later objects come on top of earlier ones. The layer structure in inkscape is shown "upside down" from the real structure (which makes more sense in a drawing program) so that layers higher up are drawn on top of lower layers. Just something to keep in mind; for example it't probably a good idea to put the "background" layer (if any) at the bottom so that it's always drawn behind everything else.
 
 
-=== Tango connections ===
+### Tango connections
 
 To connect an element to Tango, use the <desc> tag, accessible as "description" in the "Object Properties" dialog in Inkscape. It should be possible to connect any element or group of elements, including clones (<use> tags).
 
@@ -94,7 +98,7 @@ To connect an element to Tango, use the <desc> tag, accessible as "description" 
 These connections can be used in combination, by putting more than one on its own row in the description. A section that should be connected to an alarm: "section=sec1" and "alarm=sec1_alarm", etc.
 
 
-=== Gotchas ===
+### Gotchas
 
 (These will hopefully be eliminated sooner or later)
 

@@ -8,7 +8,7 @@ Example
 
 There is a demonstration program in the "example" directory that can be started like so:
 
-  python synoptic.py $(pwd)/example.svg
+    python synoptic.py $(pwd)/example.svg
 
 The example assumes a Tango installation and a running default TangoTest device in order to actually show anything of interest. Also, the path to the svg file must be absolute, for now, or you will get an error.
 

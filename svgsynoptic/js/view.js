@@ -128,9 +128,9 @@ var Synoptic = window.Synoptic || {};
         this.zoomToBBox = zoomToBBox;
 
         // Pan and zoom the view to show the given node
-        this.zoomTo = function (cls, data) {
+        this.zoomTo = function (cls, data, padding) {
             var bbox = util.transformedBoundingBox(getNode(cls, data));
-            var padding = 0.1;
+            padding = padding || 0.1;
             bbox.x -= bbox.width * padding/2;
             bbox.y -= bbox.height * padding/2;
             bbox.width *= 1 + padding;

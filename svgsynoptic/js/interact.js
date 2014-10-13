@@ -106,7 +106,6 @@ var Widget = window.Widget || {
             });;
 
     }
-
     function setupNode(node, data) {
         // We really want the parent node of the <desc>
         console.log("setupNode "+ Object.keys(data));
@@ -244,6 +243,8 @@ var Widget = window.Widget || {
 
     // visually mark a device as "selected"
     function select(kind, name) {
+
+        console.log("select " + kind + " " + name);
 
         var node = getNodes(kind, name).node(),
             parent = node.parentNode,

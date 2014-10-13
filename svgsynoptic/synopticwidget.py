@@ -12,7 +12,7 @@ from fandango import CaselessDefaultDict
 import panic
 from PyQt4.QtWebKit import QWebView, QWebPage
 import PyTango
-from taurus.qt import QtCore, QtGui
+from taurus.qt import QtCore, QtGui, Qt
 from taurus.qt.QtCore import QUrl
 from taurus.qt.qtgui.panel import TaurusWidget
 from taurus import Attribute
@@ -41,7 +41,7 @@ class JSInterface(QtCore.QObject):
         self.evaljs.connect(self.evaluate_js)  # thread safety
 
     def evaluate_js(self, js):
-        #print js
+        print "JS", js
         self.frame.evaluateJavaScript(js)
 
     @QtCore.pyqtSlot(str, str)
@@ -102,42 +102,75 @@ class SynopticWidget(TaurusWidget):
     here we just connect the JS and Tango sides up.
     """
 
-    def __init__(self, svg, registry, section=None):
-        super(SynopticWidget, self).__init__()
-        print "SynopticWidget", svg, section
+    def __init__(self, parent=None, registry=None, *args, **kwargs):
+        super(SynopticWidget, self).__init__(parent)
+        self.registry = registry or Registry()
+        print "kwargs", kwargs
+        if "svg" in kwargs:
+            model = {"svg": kwargs.get("svg"), "section": kwargs.get("section")}
+            self.setModel(**model)
+        # mapping to figure out how to register each type of object
+        self.mapping = {
+            "device": (self.registry.register_device, self._device_listener),
+            "attribute": (self.registry.register_attribute, self._attribute_listener),
+            "alarm": (self.registry.register_alarm, self._alarm_listener)
+        }
 
-        self.section = section
-        self._setup_ui(svg)
+    def setModel(self, svg, section=None):
+        self._svg_file = svg
+        self._setup_ui(svg, section)
 
-        self.registry = registry
+        synoptic = self
+        synoptic.clicked.connect(self.on_click)
+        synoptic.rightClicked.connect(self.on_rightclick)
+        synoptic.show()
 
-    def _setup_ui(self, svg):
+    def getModel(self):
+        return self._svg_file
+
+    def on_click(self, kind, name):
+        """The default behavior is to mark a clicked device and to zoom to a clicked section.
+        Override this function if you need something else."""
+        if kind == "device":
+            self.select_devices([name])
+            self.emit(Qt.SIGNAL("graphicItemSelected(QString)"), name)
+        elif kind == "section":
+            self.zoom_to_section(name)
+
+    def on_rightclick(synoptic, kind, name):
+        pass
+
+    def _setup_ui(self, svg, section=None):
         hbox = QtGui.QHBoxLayout(self)
         hbox.setContentsMargins(0, 0, 0, 0)
         hbox.layout().setContentsMargins(0, 0, 0, 0)
-        hbox.addWidget(self._create_view(svg))
+        hbox.addWidget(self._create_view(svg, section))
         self.setLayout(hbox)
 
-    def _create_view(self, svg):
+    def _create_view(self, svg, section=None):
         view = QWebView(self)
         view.setRenderHint(QtGui.QPainter.TextAntialiasing, False)
         view.setPage(LoggingWebPage())
         view.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
 
-        # load the HTML page that will contain the SVG
+        # the HTML page that will contain the SVG
         path = os.path.dirname(os.path.realpath(__file__))
         html = QUrl(os.path.join(path, "index.html"))  # make file configurable
 
-        def load_svg():
-            self.js.load(svg, self.section)
-        view.loadFinished.connect(load_svg)
-
-        view.load(html)
+        # setup the JS interface
         frame = view.page().mainFrame()
-
         self.js = JSInterface(frame)
         self.js.registered.connect(self.register)
         self.js.visibility.connect(self.listen)
+
+        # when the page (and all the JS) has loaded, load the SVG
+        def load_svg():
+            print "blorrt", self.js
+            self.js.load(svg, section)
+        view.loadFinished.connect(load_svg)
+
+        # load the page
+        view.load(html)
 
         # mouse interaction signals
         self.clicked = self.js.leftclicked
@@ -150,14 +183,8 @@ class SynopticWidget(TaurusWidget):
 
     def register(self, kind, name):
         "Connect an item in the SVG to a corresponding Tango entity"
-        mapping = {
-            "device": (self.registry.register_device, self._device_listener),
-            "attribute": (self.registry.register_attribute, self._attribute_listener),
-            #"section": (self.registry.register_section, self._section_listener),
-            "alarm": (self.registry.register_alarm, self._alarm_listener)
-        }
         print "adding Tango listener", kind, name
-        method, listener = mapping.get(str(kind), (None, None))
+        method, listener = self.mapping.get(str(kind), (None, None))
         if method and listener:
             return method(str(name), listener, id(self))
 
@@ -192,7 +219,6 @@ class SynopticWidget(TaurusWidget):
             name = evt_src.getNormalName()
             if name:
                 state = evt_value.value
-                print "device_listener", name
                 device = str(name).rsplit("/", 1)[0]
                 self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
                                     (str(device), str(state)))
@@ -251,8 +277,13 @@ class SynopticWidget(TaurusWidget):
     ### 'Public' API ###
 
     def zoom_to_section(self, secname):
+        print "zoom_to_section", secname
         self.js.evaljs.emit("Synoptic.view.zoomTo('section', %r)"
                             % str(secname))
+
+    def zoom_to_device(self, devname):
+        self.js.evaljs.emit("Synoptic.view.zoomTo('device', %r, 10)"
+                            % str(devname))
 
     def select_devices(self, devices):
         self.js.select('device', devices)
@@ -292,6 +323,7 @@ class Registry(object):
 
     def register_attribute(self, attrname, listener, widget):
         try:
+            attrname = str(attrname)
             if widget in self._attribute_listeners[attrname]:
                 return
             attr = Attribute(attrname)
@@ -310,6 +342,7 @@ class Registry(object):
         with "-" replaced by "_" and "/" by "__".
         """
         try:
+            alarmname = str(alarmname)
             devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
             attrname = "%s/%s" % (devname, alarmname)
             if widget in self._attribute_listeners[attrname]:
@@ -322,10 +355,12 @@ class Registry(object):
             print "Failed to register alarm %s: %s" % (alarmname, df)
 
     def _is_disabled(self, attrname, widget):
+        attrname = str(attrname)
         return (widget in self._attribute_listeners[attrname] and
                 widget in self._disabled_listeners[attrname])
 
     def disable_listener(self, attrname, listener, widget):
+        attrname = str(attrname)
         with self.lock:
             if not self._is_disabled(attrname, widget):
                 self._disabled_listeners[attrname].add(widget)
@@ -336,8 +371,20 @@ class Registry(object):
                     Attribute(attrname).disablePolling()
 
     def enable_listener(self, attrname, listener, widget):
+        attrname = str(attrname)
         with self.lock:
             if widget in self._attribute_listeners[attrname]:
                 Attribute(attrname).enablePolling()
                 if widget in self._disabled_listeners[attrname]:
                     self._disabled_listeners[attrname].remove(widget)
+
+
+if __name__ == '__main__':
+    import sys
+    from PyQt4 import Qt
+    print sys.argv[1]
+    qapp = Qt.QApplication([])
+    sw = SynopticWidget()
+    sw.show()
+    sw.setModel(sys.argv[1])
+    qapp.exec_()

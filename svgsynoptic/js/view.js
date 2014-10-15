@@ -22,11 +22,22 @@ var Synoptic = window.Synoptic || {};
         var bbox = svg.select("g").node();
         //console.log("bbox", bbox.getBBox());
 
+        // original svg size
         width = svg.attr("width");
         height = svg.attr("height");
+
+        // container element
         container = d3.select("#synoptic .container");
         cont_width = container.node().offsetWidth;
         cont_height = container.node().offsetHeight;
+
+        // set the SVG to take up all of the element no matter what
+        svg.attr("width", cont_width);
+        svg.attr("height", cont_height);
+        // viewbox need to be set in order for scaling to be correct
+        svg.attr("viewBox", "0 0 " +  cont_width + " " + cont_height);
+
+        // one-to-one scale
         scale0 = Math.min(cont_width / width, cont_height / height);
 
         // callback to update scale and translation when the user
@@ -89,6 +100,15 @@ var Synoptic = window.Synoptic || {};
             .size([cont_width, cont_height])
             .on("zoom", onZoomed);
 
+        function setZoom  (bbox) {
+            bbox = bbox || {x: 0, y: 0, width: width, height: height};
+            var scale = Math.min(cont_width / bbox.width,
+                                 cont_height / bbox.height),
+                translate = [cont_width / 2 - scale * (bbox.x + bbox.width / 2),
+                             cont_height / 2 - scale * (bbox.y + bbox.height / 2)];
+            return zoom.translate(translate).scale(scale);
+        };
+
         setZoom();
         svg.call(zoom);
 
@@ -101,6 +121,10 @@ var Synoptic = window.Synoptic || {};
             cont_width = container.node().offsetWidth,
             cont_height = container.node().offsetHeight;
             scale0 = Math.min(cont_width / width, cont_height / height);
+
+            svg.attr("width", cont_width);
+            svg.attr("height", cont_height);
+            svg.attr("viewBox", "0 0 " +  cont_width + " " + cont_height);
 
             var new_scale = old_scale * cont_width / old_w;
 
@@ -170,15 +194,6 @@ var Synoptic = window.Synoptic || {};
             };
         };
         this.getBoundingBox = getBoundingBox;
-
-        function setZoom  (bbox) {
-            bbox = bbox || {x: 0, y: 0, width: width, height: height};
-            var scale = Math.min(cont_width / bbox.width,
-                                 cont_height / bbox.height),
-                translate = [cont_width / 2 - scale * (bbox.x + bbox.width / 2),
-                             cont_height / 2 - scale * (bbox.y + bbox.height / 2)];
-            return zoom.translate(translate).scale(scale);
-        };
 
         // immediately zoom to the section if given
         if (section) {

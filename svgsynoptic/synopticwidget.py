@@ -102,23 +102,25 @@ class SynopticWidget(TaurusWidget):
     here we just connect the JS and Tango sides up.
     """
 
-    def __init__(self, parent=None, registry=None, *args, **kwargs):
+    def __init__(self, parent=None, *args, **kwargs):
         super(SynopticWidget, self).__init__(parent)
-        self.registry = registry or Registry()
+        #self.registry = registry #or Registry()
         print "kwargs", kwargs
         if "svg" in kwargs:
             model = {"svg": kwargs.get("svg"), "section": kwargs.get("section")}
             self.setModel(**model)
         # mapping to figure out how to register each type of object
-        self.mapping = {
-            "device": (self.registry.register_device, self._device_listener),
-            "attribute": (self.registry.register_attribute, self._attribute_listener),
-            "alarm": (self.registry.register_alarm, self._alarm_listener)
-        }
+        # self.mapping = {
+        #     "device": (self.registry.register_device, self._device_listener),
+        #     "attribute": (self.registry.register_attribute, self._attribute_listener),
+        #     "alarm": (self.registry.register_alarm, self._alarm_listener)
+        # }
 
-    def setModel(self, svg, section=None):
-        self._svg_file = svg
-        self._setup_ui(svg, section)
+    def setModel(self, url, section=None):
+        #self._svg_file = svg
+        print "setModel", url
+        self._url = url
+        self._setup_ui(url, section)
 
         synoptic = self
         synoptic.clicked.connect(self.on_click)
@@ -126,7 +128,7 @@ class SynopticWidget(TaurusWidget):
         synoptic.show()
 
     def getModel(self):
-        return self._svg_file
+        return self._url
 
     def on_click(self, kind, name):
         """The default behavior is to mark a clicked device and to zoom to a clicked section.
@@ -140,37 +142,37 @@ class SynopticWidget(TaurusWidget):
     def on_rightclick(synoptic, kind, name):
         pass
 
-    def _setup_ui(self, svg, section=None):
+    def _setup_ui(self, url, section=None):
         hbox = QtGui.QHBoxLayout(self)
         hbox.setContentsMargins(0, 0, 0, 0)
         hbox.layout().setContentsMargins(0, 0, 0, 0)
-        hbox.addWidget(self._create_view(svg, section))
+        hbox.addWidget(self._create_view(url, section))
         self.setLayout(hbox)
 
-    def _create_view(self, svg, section=None):
+    def _create_view(self, url, section=None):
         view = QWebView(self)
         view.setRenderHint(QtGui.QPainter.TextAntialiasing, False)
         view.setPage(LoggingWebPage())
         view.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
 
         # the HTML page that will contain the SVG
-        path = os.path.dirname(os.path.realpath(__file__))
-        html = QUrl(os.path.join(path, "index.html"))  # make file configurable
+        # path = os.path.dirname(os.path.realpath(__file__))
+        #html = QUrl(os.path.join(path, "index.html"))  # make file configurable
 
         # setup the JS interface
         frame = view.page().mainFrame()
         self.js = JSInterface(frame)
-        self.js.registered.connect(self.register)
-        self.js.visibility.connect(self.listen)
+        #self.js.registered.connect(self.register)
+        #self.js.visibility.connect(self.listen)
 
         # when the page (and all the JS) has loaded, load the SVG
-        def load_svg():
-            print "blorrt", self.js
-            self.js.load(svg, section)
-        view.loadFinished.connect(load_svg)
+        # def load_svg():
+        #     print "blorrt", self.js
+        #     self.js.load(svg, section)
+        # view.loadFinished.connect(load_svg)
 
         # load the page
-        view.load(html)
+        view.load(QUrl(url))
 
         # mouse interaction signals
         self.clicked = self.js.leftclicked

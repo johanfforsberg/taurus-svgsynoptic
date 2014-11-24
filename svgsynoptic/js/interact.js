@@ -4,14 +4,15 @@ var Synoptic = window.Synoptic || {};
 
 // Mock widget (for when we have no python backend)
 var Widget = window.Widget || {
-    register: function (kind, dev) {console.log("register " + dev); return true;},
+
     left_click: function (kind, name) {
+        console.log("left_click");
         if (kind === "section")
             Synoptic.view.zoomTo(kind, name);
         if (kind === "device")
             Synoptic.selectDevice(name);
     },
-    right_click: function () {},
+    right_click: function () {console.log("rightclick");},
     set_listening: function () {}
 };
 
@@ -49,13 +50,17 @@ var Widget = window.Widget || {
                 var node = d3.select(this),
                     name = d3.select(this).attr("inkscape:label"),
                     match = /zoom(\d)/.exec(name);
-                console.log("zoom level", name);
                 if (match) {
                     var level = parseInt(match[1]);
+                    console.log("zoom level", name, level);
                     node.classed("zoom", true);
                     node.classed("level"+level, true);
                 }
             });
+
+        if (svg.select("g").attr("transform"))
+            console.log("*Warning* there is a transform on the 'main' layer/group in the SVG. " +
+                        "This is likely to mess up positioning of some things.");
 
 
         // Remove inline styles from symbols, to make sure they will
@@ -80,6 +85,25 @@ var Widget = window.Widget || {
         // problems back.
     }
 
+    var tooltip_content = Handlebars.compile(
+        "<table>" +
+            "{{#if device}}" +
+               '<tr><td class="label">Device:</td><td class="value">{{device}}</td></tr>' +
+               '<tr><td class="label">State:</td><td class="value">{{state}}</td></tr>' +
+            "{{/if}}" +
+            "{{#if attribute}}" +
+               '<tr><td class="label">Attribute:</td><td class="value">{{attribute}}</td></tr>' +
+               '<tr><td class="label">Value:</td><td class="value">{{value}}</td></tr>' +
+            "{{/if}}" +
+        "</table>"
+    );
+
+    // var tooltip = d3.tip()
+    //         .attr('class', 'd3-tip')
+    //         .html(tooltip_content)
+    //         .offset([-10, 0]);
+
+
     // Register all devices, attributes, etc with the Tango side
     function register (svg) {
 
@@ -88,6 +112,8 @@ var Widget = window.Widget || {
         // the class and data of the parent element accordingly.
         // This makes it convenient to use D3.js to iterate over things.
         var pattern = /^(device|attribute|section|alarm)=(.*)/;
+
+        //svg.call(tooltip);
 
         svg.selectAll("desc")
             .each(function () {
@@ -98,24 +124,32 @@ var Widget = window.Widget || {
                     if (match) {
                         var kind = match[1], name = match[2];
                         data[kind] = name;
+                        if (kind == "attribute")
+                            data.model = name;
+                        else if (kind == "device")
+                            data.model = name + "/State";
                         // register with widget side
-                        Widget.register(kind, name);
+                        //Tango.register(data.model);
                     }
                 }, this);
                 if (data) setupNode(this, data);
             });;
+
+        updateActive(svg);
 
     }
     function setupNode(node, data) {
         // We really want the parent node of the <desc>
         console.log("setupNode "+ Object.keys(data));
         var sel = d3.select(node.parentNode)
-            .classed(data)
-            .data([data])
-        // mouse interactions
-            .on("mouseover", showTooltip)
-            .on("mousemove", updateTooltip)
-            .on("mouseout", hideTooltip)
+                .classed(data)
+                .data([data])
+                // mouse interactions
+                .on("mouseover", showTooltip)
+                .on("mousemove", updateTooltip)
+                .on("mouseout", hideTooltip)
+                // .on("mouseover", tooltip.show)
+                // .on("mouseout", tooltip.hide)
             .on("click", function () {
                 if (d3.event.defaultPrevented) return;
                 Object.keys(data).forEach(function (kind) {
@@ -131,12 +165,9 @@ var Widget = window.Widget || {
     }
 
     function showTooltip(info) {
+        console.log(tooltip_content(info));
         d3.select("#synoptic div.tooltip")
-            .html(function (d) {
-                return (info.device? "device: " + info.device + "<br>" : "") +
-                    (info.attribute? "attribute: " + info.attribute + "<br>" : "") +
-                    (info.section? "section: " + info.section + "<br>" : "");
-                })
+            .html(function () {return tooltip_content(info);})
             .style("visibility", "visible");
     }
 
@@ -156,14 +187,14 @@ var Widget = window.Widget || {
             .filter(function (d) {return d[kind] == name;});
     }
 
-    // Set the status class of a device
-    var statuses = ["UNKNOWN", "INIT", "RUNNING", "MOVING",
-                    "ON", "OFF", "INSERT", "EXTRACT", "OPEN", "CLOSE",
-                    "STANDBY", "ALARM", "FAULT", "DISABLE"];
-    function getStatusClasses(status) {
+    // Set the state class of a device
+    var states = ["UNKNOWN", "INIT", "RUNNING", "MOVING",
+                  "ON", "OFF", "INSERT", "EXTRACT", "OPEN", "CLOSE",
+                  "STANDBY", "ALARM", "FAULT", "DISABLE"];
+    function getStateClasses(state) {
         var classes = {};
-        statuses.forEach(function (s) {
-            classes["status-" + s] = s == status;
+        states.forEach(function (s) {
+            classes["state-" + s] = s == state;
         });
         return classes;
     };
@@ -178,16 +209,22 @@ var Widget = window.Widget || {
                 classes = {"boolean-true": value, "boolean-false": !value};
             sel.classed(classes);
         } else if (type == "DevState") {
-            // Treat the "Status" attribute specially
-            sel.classed(getStatusClasses(value_str));
+            // Treat the "State" attribute specially
+            sel.classed(getStateClasses(value_str));
         } else {
             sel.text(value_str + (unit? " " + unit: ""));
         }
+        // A bit of a hack...
+        var d = sel.datum();
+        d["value"] = value_str;
+        d["unit"] = unit;
     };
 
-    function setDeviceStatus(devname, value) {
+    function setDeviceState(devname, value) {
         var sel = getNodes("device", devname);
-        sel.classed(getStatusClasses(value));
+        sel.classed(getStateClasses(value));
+        var d = sel.datum();
+        d["state"] = value;
     };
 
 
@@ -244,8 +281,6 @@ var Widget = window.Widget || {
     // visually mark a device as "selected"
     function select(kind, name) {
 
-        console.log("select " + kind + " " + name);
-
         var node = getNodes(kind, name).node(),
             parent = node.parentNode,
             bbox = util.transformedBoundingBox(node);
@@ -271,21 +306,32 @@ var Widget = window.Widget || {
         svg.selectAll(".layer:not(.active) .attribute, .layer:not(.active) .device ")
             .classed("active", false)
             .each(function (d) {
-                Widget.visible(d.attribute || (d.device + "/State"), false);
+                //Widget.visible(d.attribute || (d.device + "/State"), false);
+                //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
+                Tango.unregister(d.model);
             });
 
         // disable stuff in invisible zoom levels
         svg.selectAll(".layer.active > .zoom:not(.active) .attribute, .layer.active > .zoom:not(.active) .device")
             .classed("active", false)
             .each(function (d) {
-                Widget.visible(d.attribute || (d.device + "/State"), false);
+                //Widget.visible(d.attribute || (d.device + "/State"), false);
+                //Tango.unregister("attribute", d.attribute || (d.device + "/State"), false);
+                Tango.unregister(d.model);
             });
 
         // finally enable things that are in view
         svg.selectAll(".layer.active > .zoom.active .attribute, .layer.active > .zoom.active .device")
             .classed("active", function (d) {
                 var visible = isInView(this, bbox);
-                Widget.visible(d.attribute || (d.device + "/State"), visible);
+                if (visible) {
+                    //Tango.register("attribute", d.attribute || (d.device + "/State"));
+                    Tango.register(d.model);
+                } else {
+                    //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
+                    Tango.unregister(d.model);
+                }
+                //Widget.visible(d.attribute || (d.device + "/State"), visible);
                 return visible;
             });
     }
@@ -300,6 +346,7 @@ var Widget = window.Widget || {
     // return whether a given element is currently in view
     function isInView(el, vbox) {
         var bbox = util.transformedBoundingBox(el);
+        vbox = vbox || bbox;
         // TODO: change this so that partially visible devices are counted as visible.
         // This is done on purpose to simplify debugging for now.
         var result = (bbox.x > -vbox.x - bbox.width &&
@@ -315,7 +362,7 @@ var Widget = window.Widget || {
     Synoptic.register = register;
     Synoptic.updateActive = updateActive;
     Synoptic.setAttribute = setAttribute;
-    Synoptic.setDeviceStatus = setDeviceStatus;
+    Synoptic.setDeviceState = setDeviceState;
     Synoptic.setAlarm = setAlarm;
     Synoptic.setSubAlarm = setSubAlarm;
     Synoptic.unselectAll = unselectAll;

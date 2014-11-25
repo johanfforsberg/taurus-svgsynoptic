@@ -169,6 +169,8 @@ class SynopticWidget(TaurusWidget):
         listeners, as presumably they are from e.g. panels. Doing that
         seems to cause trouble (and makes no sense anyway).
         """
+        # QString to str
+        name = str(name)
         try:
             if active:
                 # TODO: a nicer way to keep track of different listener types.

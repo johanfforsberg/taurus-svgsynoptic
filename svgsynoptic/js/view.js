@@ -182,8 +182,7 @@ var Synoptic = window.Synoptic || {};
             console.log("getNode " + cls + " " + data);
             var sel = svg
                     .selectAll("." + cls)
-                    .filter(function (d) {console.log(d[cls]);
-                                          return d[cls] == data;});
+                    .filter(function (d) {return d[cls] == data;});
             return sel.node();
         };
 

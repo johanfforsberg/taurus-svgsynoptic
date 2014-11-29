@@ -8,6 +8,7 @@ import logging
 import os
 import time
 from threading import Thread, Lock
+from Queue import Queue, Empty
 from weakref import WeakValueDictionary
 
 from fandango import CaselessDefaultDict
@@ -37,6 +38,7 @@ class JSInterface(QtCore.QObject):
     rightclicked = QtCore.pyqtSignal(str, str)
     leftclicked = QtCore.pyqtSignal(str, str)
     evaljs = QtCore.pyqtSignal(str)
+    lock = Lock()
 
     def __init__(self, frame, parent=None):
 
@@ -46,8 +48,9 @@ class JSInterface(QtCore.QObject):
         self.evaljs.connect(self.evaluate_js)  # thread safety
 
     def evaluate_js(self, js):
-        #print "JS", js
-        self.frame.evaluateJavaScript(js)
+        print "JS", js
+        with self.lock:
+            self.frame.evaluateJavaScript(js)
 
     @QtCore.pyqtSlot(str, str)
     def left_click(self, kind, name):
@@ -110,16 +113,6 @@ class SynopticWidget(TaurusWidget):
     def __init__(self, parent=None, *args, **kwargs):
         super(SynopticWidget, self).__init__(parent)
 
-        print "kwargs", kwargs
-        if "svg" in kwargs:
-            model = {"svg": kwargs.get("svg"), "section": kwargs.get("section")}
-            self.setModel(**model)
-        # mapping to figure out how to register each type of object
-        # self.mapping = {
-        #     "device": (self.registry.register_device, self._device_listener),
-        #     "attribute": (self.registry.register_attribute, self._attribute_listener),
-        #     "alarm": (self.registry.register_alarm, self._alarm_listener)
-        # }
         self.listeners = {} #WeakValueDictionary()
         self.attribute_name_validator = AttributeNameValidator()
 
@@ -129,7 +122,8 @@ class SynopticWidget(TaurusWidget):
         # print "setModel", url
         self._svg = svg
         self._setup_ui(svg, section)
-        self.registry = Registry(self.js)
+        self.registry = Registry()
+        self.registry.start()
 
         synoptic = self
         synoptic.clicked.connect(self.on_click)
@@ -149,10 +143,10 @@ class SynopticWidget(TaurusWidget):
         """
         if active:
             if self.attribute_name_validator.isValid(name):
-                self.registry._subscribe_attribute(name, self.registry._attribute_listener)
+                self.registry.subscribe_attribute(name, self._attribute_listener)
         else:
             if self.attribute_name_validator.isValid(name):
-                self.registry._unsubscribe_attribute(name)
+                self.registry.unsubscribe_attribute(name)
 
     def on_click(self, kind, name):
         """The default behavior is to mark a clicked device and to zoom to a clicked section.
@@ -210,7 +204,6 @@ class SynopticWidget(TaurusWidget):
 
         return view
 
-
     def _set_sub_alarms(self, basename):
 
         """Find all devices that 'belong' to an alarm and update their
@@ -226,77 +219,6 @@ class SynopticWidget(TaurusWidget):
                 self.js.evaljs.emit(
                     "Synoptic.setSubAlarm(%r, %r, %s)" %
                     ("device", devname, str(bool(active)).lower()))
-
-    def _alarm_listener(self, evt_src, evt_type, evt_value):
-        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-                        PyTango.EventType.CHANGE_EVENT):
-            name = evt_src.getNormalName()
-            if name:
-                print "alarm_listener", name
-                alarmname = str(name).rsplit("/", 1)[-1]
-                value = evt_value.value
-                self.js.evaljs.emit("Synoptic.setAlarm(%r, %s)" % (
-                    alarmname, str(value).lower()))
-                self._set_sub_alarms(alarmname)
-
-    ### 'Public' API ###
-
-    def zoom_to_section(self, secname):
-        print "zoom_to_section", secname
-        self.js.evaljs.emit("Synoptic.view.zoomTo('section', %r)"
-                            % str(secname))
-
-    def zoom_to_device(self, devname):
-        self.js.evaljs.emit("Synoptic.view.zoomTo('device', %r, 10)"
-                            % str(devname))
-
-    def select_devices(self, devices):
-        self.js.select('device', devices)
-
-
-class Registry(object):
-
-    def __init__(self, js):
-
-        self.js = js
-        #lock = Lock()
-        self.listeners = {}
-
-    def run(self):
-        while True:
-            print "running..."
-            time.sleep(5)
-
-    def register(self, kind, name):
-        "Connect an item in the SVG to a corresponding Tango entity"
-        # print "adding Tango listener", kind, name
-        # method, listener = self.mapping.get(str(kind), (None, None))
-        # if method and listener:
-        #     return method(str(name), listener, id(self))
-
-        # try:
-        #     if active:
-        #         # TODO: a nicer way to keep track of different listener types.
-        #         # Ideally, there should be only one type.
-        #         self.registry.enable_listener(name, self._attribute_listener, id(self))
-        #         self.registry.enable_listener(name, self._device_listener, id(self))
-        #         self.registry.enable_listener(name, self._alarm_listener, id(self))
-        #     else:
-        #         self.registry.disable_listener(name, self._attribute_listener, id(self))
-        #         self.registry.disable_listener(name, self._device_listener, id(self))
-        #         self.registry.disable_listener(name, self._alarm_listener, id(self))
-        # except PyTango.DevFailed as df:
-        #     print "Failed to update listener %s: %s" % (name, df)
-
-    def _subscribe_attribute(self, attrname, callback):
-        if not attrname in self.listeners:
-            listener = TaurusWebAttribute(attrname, callback)
-            self.listeners[attrname] = listener
-
-    def _unsubscribe_attribute(self, attrname):
-        listener = self.listeners.pop(attrname, None)
-        if listener:
-            listener.clear()
 
     ### Listener callbacks ###
 
@@ -334,97 +256,88 @@ class Registry(object):
                 self.js.evaljs.emit("Synoptic.setAttribute('%s', '%s', '%s', '%s')" %
                                     (name, value_str, attr_type, unit))
 
+    def _alarm_listener(self, evt_src, evt_type, evt_value):
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            name = evt_src.getNormalName()
+            if name:
+                print "alarm_listener", name
+                alarmname = str(name).rsplit("/", 1)[-1]
+                value = evt_value.value
+                self.js.evaljs.emit("Synoptic.setAlarm(%r, %s)" % (
+                    alarmname, str(value).lower()))
+                self._set_sub_alarms(alarmname)
+
+    ### 'Public' API ###
+
+    def zoom_to_section(self, secname):
+        print "zoom_to_section", secname
+        self.js.evaljs.emit("Synoptic.view.zoomTo('section', %r)"
+                            % str(secname))
+
+    def zoom_to_device(self, devname):
+        self.js.evaljs.emit("Synoptic.view.zoomTo('device', %r, 10)"
+                            % str(devname))
+
+    def select_devices(self, devices):
+        self.js.select('device', devices)
+
+    def closeEvent(self, event):
+        "Clean things up"
+        self.registry.running = False
+        self.registry.join()
+        del self.registry
 
 
+class Registry(Thread):
 
-class _Registry(object):
+    """This is a separate thread that takes care of sub- and unsubscribing
+    to attributes. This in order to keep the UI thread running smoothly event
+    if we're setting up lots of listeners at once."""
 
-    """A simple 'registry' for attribute callbacks. It makes sure that no
-    duplicate callbacks are registered and also takes care to stop
-    polling an attribute if all its listeners are disabled.
+    def __init__(self):
+        Thread.__init__(self)
+        self.listeners = {}
+        self.to_subscribe = Queue()
+        self.to_unsubscribe = Queue()
 
-    It should be treated as a singleton; all synoptic widgets should share
-    the same one, or there will be collisions where they start disabling
-    polling for each other. Not pretty.
-    """
+    def __del__(self):
+        "Some extra freeing of stuff, to make sure"
+        for listener in self.listeners.values():
+            listener.clear()
+        self.listeners.clear()
 
-    # keep track of attributes so that we don't add multiple
-    # listeners if they are used more than once
-    _attribute_listeners = CaselessDefaultDict(set)
-    _alarm_listeners = CaselessDefaultDict(set)
+    def run(self):
+        "Main loop. Keeps waiting for instructions."
+        self.running = True
+        while self.running:
+            time.sleep(1.0)
+            while not self.to_subscribe.empty():
+                attr, callback = self.to_subscribe.get()
+                self._subscribe_attribute(attr, callback)
+            while not self.to_unsubscribe.empty():
+                attr = self.to_unsubscribe.get()
+                self._unsubscribe_attribute(attr)
 
-    _disabled_listeners = CaselessDefaultDict(set)
+    def register(self, kind, name):
+        "Connect an item in the SVG to a corresponding Tango entity"
+        # remove
 
-    lock = Lock()
-    panic = panic.api()
+    def subscribe_attribute(self, attrname, callback):
+        self.to_subscribe.put((attrname, callback))
 
-    def register_device(self, devname, listener, widget):
-        try:
-            attrname = "%s/State" % str(devname)
-            if widget in self._attribute_listeners[attrname]:
-                return
-            attr = Attribute(attrname)
-            self._attribute_listeners[attrname].add(widget)
-            attr.addListener(listener)
-        except PyTango.DevFailed as df:
-            print "Failed to register device %s: %s" % (devname, df)
+    def unsubscribe_attribute(self, attrname):
+        self.to_unsubscribe.put(attrname)
 
-    def register_attribute(self, attrname, listener, widget):
-        try:
-            attrname = str(attrname)
-            if widget in self._attribute_listeners[attrname]:
-                return
-            attr = Attribute(attrname)
-            self._attribute_listeners[attrname].add(widget)
-            attr.addListener(listener)
-            print("Registered attribute %s" % attrname)
-        except PyTango.DevFailed as df:
-            print "Failed to register attribute %s: %s" % (attrname, df)
+    def _subscribe_attribute(self, attrname, callback):
+        if not attrname in self.listeners:
+            listener = TaurusWebAttribute(attrname, callback)
+            self.listeners[attrname] = listener
 
-    def register_section(self, secname):
-        pass
-
-    def register_alarm(self, alarmname, listener, widget):
-        """
-        The name of the alarm should be the (beginning of) a device name
-        with "-" replaced by "_" and "/" by "__".
-        """
-        try:
-            alarmname = str(alarmname)
-            devname = self.panic.get_configs(alarmname)[alarmname]["Device"]
-            attrname = "%s/%s" % (devname, alarmname)
-            if widget in self._attribute_listeners[attrname]:
-                return
-            attr = Attribute(attrname)
-            self._attribute_listeners[attrname].add(widget)
-            attr.addListener(listener)
-            print("Registered alarm %s" % alarmname)
-        except PyTango.DevFailed as df:
-            print "Failed to register alarm %s: %s" % (alarmname, df)
-
-    def _is_disabled(self, attrname, widget):
-        attrname = str(attrname)
-        return (widget in self._attribute_listeners[attrname] and
-                widget in self._disabled_listeners[attrname])
-
-    def disable_listener(self, attrname, listener, widget):
-        attrname = str(attrname)
-        with self.lock:
-            if not self._is_disabled(attrname, widget):
-                self._disabled_listeners[attrname].add(widget)
-                # check if anybody is currently interested in the attribute
-                # and if not, we stop polling it
-                if (len(self._disabled_listeners[attrname]) ==
-                    len(self._attribute_listeners[attrname])):
-                    Attribute(attrname).disablePolling()
-
-    def enable_listener(self, attrname, listener, widget):
-        attrname = str(attrname)
-        with self.lock:
-            if widget in self._attribute_listeners[attrname]:
-                Attribute(attrname).enablePolling()
-                if widget in self._disabled_listeners[attrname]:
-                    self._disabled_listeners[attrname].remove(widget)
+    def _unsubscribe_attribute(self, attrname):
+        listener = self.listeners.pop(attrname, None)
+        if listener:
+            listener.clear()
 
 
 if __name__ == '__main__':

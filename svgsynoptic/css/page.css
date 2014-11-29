@@ -34,9 +34,18 @@ body {
     position:absolute;
     padding: 3px;
     background: black;
-    color: white;
-    position: absolute;
+    opacity: 0.8;
     visibility: hidden;
+    z-index: 100;
+}
+
+#synoptic .tooltip .label {
+    color: white;
+}
+
+#synoptic .tooltip .value {
+    font-weight: bold;
+    color: white;
     white-space: nowrap;
 }
 

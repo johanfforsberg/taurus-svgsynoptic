@@ -85,26 +85,7 @@ var Widget = window.Widget || {
         // problems back.
     }
 
-    var tooltip_content = Handlebars.compile(
-        "<table>" +
-            "{{#if device}}" +
-               '<tr><td class="label">Device:</td><td class="value">{{device}}</td></tr>' +
-               '<tr><td class="label">State:</td><td class="value">{{state}}</td></tr>' +
-            "{{/if}}" +
-            "{{#if attribute}}" +
-               '<tr><td class="label">Attribute:</td><td class="value">{{attribute}}</td></tr>' +
-               '<tr><td class="label">Value:</td><td class="value">{{value}}</td></tr>' +
-            "{{/if}}" +
-        "</table>"
-    );
-
-    // var tooltip = d3.tip()
-    //         .attr('class', 'd3-tip')
-    //         .html(tooltip_content)
-    //         .offset([-10, 0]);
-
-
-    // Register all devices, attributes, etc with the Tango side
+    // Set the SVG file up for interaction with the Tango side
     function register (svg) {
 
         // go through the svg and find all <desc> elements containing
@@ -122,34 +103,32 @@ var Widget = window.Widget || {
                 lines.forEach(function (line) {
                     var match = pattern.exec(line);
                     if (match) {
-                        var kind = match[1], name = match[2];
+                        var kind = match[1].trim(), name = match[2].trim();
                         data[kind] = name;
-                        // if (kind == "attribute")
-                        //     data.model = name;
-                        if (kind == "device")
+                        if (kind == "device") {
+                            // For devices, we assume that the "status" attribute
+                            // is interesting. This saves a lot of typing.
                             data.attribute = name + "/State";
-                        // register with widget side
-                        //Tango.register(data.model);
+                        }
                     }
                 }, this);
                 if (data) setupNode(this, data);
             });;
 
         updateActive(svg);
-
     }
+
+    // Setup the interactivity
     function setupNode(node, data) {
-        // We really want the parent node of the <desc>
         console.log("setupNode "+ JSON.stringify(data));
+        // We really want the parent node of the <desc>
         var sel = d3.select(node.parentNode)
                 .classed(data)
                 .data([data])
                 // mouse interactions
                 .on("mouseover", showTooltip)
-                .on("mousemove", updateTooltip)
+                .on("mousemove", moveTooltip)
                 .on("mouseout", hideTooltip)
-                // .on("mouseover", tooltip.show)
-                // .on("mouseout", tooltip.hide)
             .on("click", function () {
                 if (d3.event.defaultPrevented) return;
                 Object.keys(data).forEach(function (kind) {
@@ -164,24 +143,57 @@ var Widget = window.Widget || {
             });
     }
 
+    // === Tooltip helpers ===
+
+    // Template for the tooltip
+    var tooltip_content = Handlebars.compile(
+        "<table>" +
+            "{{#if device}}" +
+               '<tr><td class="label">Device:</td><td class="value">{{device}}</td></tr>' +
+               '<tr><td class="label">State:</td><td class="value">{{value}}</td></tr>' +
+            "{{else}}" +
+                "{{#if attribute}}" +
+                   '<tr><td class="label">Attribute:</td><td class="value">{{attribute}}</td></tr>' +
+                   '<tr><td class="label">Value:</td><td class="value">{{value}}</td></tr>' +
+                "{{/if}}" +
+            "{{/if}}" +
+            "{{#if section}}" +
+                '<tr><td class="label">Section:</td><td class="value">{{section}}</td></tr>' +
+            "{{/if}}" +
+        "</table>"
+    );
+
+    var tooltip = d3.select("#synoptic div.tooltip");
+
     function showTooltip(info) {
-        console.log(tooltip_content(info));
-        d3.select("#synoptic div.tooltip")
+        tooltip
             .html(function () {return tooltip_content(info);})
+            //.html(info.attribute || info.section || "Not defined")
             .style("visibility", "visible");
     }
 
-    function updateTooltip() {
-        d3.select("#synoptic div.tooltip")
-            .style("left", d3.event.clientX + 10)
-            .style("top", d3.event.clientY + 10);
+    function moveTooltip() {
+        // try to maximize the odds that the tooltip fits on screen...
+        if (d3.event.clientX > window.innerWidth/2) {
+            tooltip
+                .style("left", d3.event.clientX - 10 - tooltip.node().clientWidth)
+                .style("top", d3.event.clientY + 10);
+        } else {
+            tooltip
+                .style("left", d3.event.clientX + 10)
+                .style("top", d3.event.clientY + 10);
+        }
     }
 
     function hideTooltip() {
-        d3.select("#synoptic div.tooltip")
+        tooltip
             .style("visibility", "hidden");
     }
 
+    // ====
+
+    // return nodes corresponding to a given kind ("device", "attribute", etc)
+    // and name (e.g. device/attribute name).
     function getNodes(kind, name) {
         return d3.selectAll("#synoptic svg ." + kind)
             .filter(function (d) {return d[kind] == name;});
@@ -228,7 +240,6 @@ var Widget = window.Widget || {
         var d = sel.datum();
         d["state"] = value;
     };
-
 
     // find the name of the layer where a node belongs
     function getNodeLayer(node) {
@@ -280,7 +291,7 @@ var Widget = window.Widget || {
             .remove();
     }
 
-    // visually mark a device as "selected"
+    // visually mark something as "selected"
     function select(kind, name) {
 
         var node = getNodes(kind, name).node(),
@@ -346,50 +357,10 @@ var Widget = window.Widget || {
         outside = _.uniq(outside);
 
         Tango.subscribe(inside, setAttribute);
-        // don't unsubscribe things in view (there can be several instances)
+        // don't unsubscribe things also in view
+        // (there can be several instances)
         Tango.unsubscribe(_.without(outside, inside), setAttribute);
     }
-
-    // // Check which things are in view and need to get updates
-    // function _updateActive (svg, bbox) {
-
-
-    //     // TODO: Do this in a smarter way...
-
-    //     // make sure all is disabled in non-selected layers
-    //     svg.selectAll(".layer:not(.active) .attribute, .layer:not(.active) .device ")
-    //         .classed("active", false)
-    //         .each(function (d) {
-    //             //Widget.visible(d.attribute || (d.device + "/State"), false);
-    //             //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
-    //             Tango.unregister(d.attribute);
-    //         });
-
-    //     // disable stuff in invisible zoom levels
-    //     svg.selectAll(".layer.active > .zoom:not(.active) .attribute, .layer.active > .zoom:not(.active) .device")
-    //         .classed("active", false)
-    //         .each(function (d) {
-    //             //Widget.visible(d.attribute || (d.device + "/State"), false);
-    //             //Tango.unregister("attribute", d.attribute || (d.device + "/State"), false);
-    //             Tango.unregister(d.attribute);
-    //         });
-
-    //     // finally enable things that are in view
-    //     svg.selectAll(".layer.active > .zoom.active .attribute, .layer.active > .zoom.active .device")
-    //         .classed("active", function (d) {
-    //             var visible = isInView(this, bbox);
-    //             if (visible) {
-    //                 //Tango.register("attribute", d.attribute || (d.device + "/State"));
-    //                 console.log("isInView: " + d.model);
-    //                 Tango.register(d.attribute);
-    //             } else {
-    //                 //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
-    //                 Tango.unregister(d.attribute);
-    //             }
-    //             //Widget.visible(d.attribute || (d.device + "/State"), visible);
-    //             return visible;
-    //         });
-    // }
 
     // The above could becone a bit heavy because a lot of elements
     // are looped through.  Limit update frequency a bit since it's

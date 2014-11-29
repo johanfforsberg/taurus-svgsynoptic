@@ -6,7 +6,9 @@ various areas to zoom in.
 
 import logging
 import os
-from threading import Lock
+import time
+from threading import Thread, Lock
+from weakref import WeakValueDictionary
 
 from fandango import CaselessDefaultDict
 import panic
@@ -16,6 +18,9 @@ from taurus.qt import QtCore, QtGui, Qt
 from taurus.qt.QtCore import QUrl
 from taurus.qt.qtgui.panel import TaurusWidget
 from taurus import Attribute
+from taurus.core.taurusvalidator import AttributeNameValidator, DeviceNameValidator
+
+from listener import TaurusWebAttribute
 
 
 class JSInterface(QtCore.QObject):
@@ -41,7 +46,7 @@ class JSInterface(QtCore.QObject):
         self.evaljs.connect(self.evaluate_js)  # thread safety
 
     def evaluate_js(self, js):
-        print "JS", js
+        #print "JS", js
         self.frame.evaluateJavaScript(js)
 
     @QtCore.pyqtSlot(str, str)
@@ -104,7 +109,7 @@ class SynopticWidget(TaurusWidget):
 
     def __init__(self, parent=None, *args, **kwargs):
         super(SynopticWidget, self).__init__(parent)
-        #self.registry = registry #or Registry()
+
         print "kwargs", kwargs
         if "svg" in kwargs:
             model = {"svg": kwargs.get("svg"), "section": kwargs.get("section")}
@@ -115,12 +120,16 @@ class SynopticWidget(TaurusWidget):
         #     "attribute": (self.registry.register_attribute, self._attribute_listener),
         #     "alarm": (self.registry.register_alarm, self._alarm_listener)
         # }
+        self.listeners = {} #WeakValueDictionary()
+        self.attribute_name_validator = AttributeNameValidator()
 
-    def setModel(self, url, section=None):
+
+    def setModel(self, svg, section=None):
         #self._svg_file = svg
-        print "setModel", url
-        self._url = url
-        self._setup_ui(url, section)
+        # print "setModel", url
+        self._svg = svg
+        self._setup_ui(svg, section)
+        self.registry = Registry(self.js)
 
         synoptic = self
         synoptic.clicked.connect(self.on_click)
@@ -129,6 +138,21 @@ class SynopticWidget(TaurusWidget):
 
     def getModel(self):
         return self._url
+
+    def listen(self, name, active=True):
+        """Turn polling on/off for a registered attribute. This does nothing
+        if events are used, but then there's no need... right?
+
+        Note: we don't want to disable polling if there are other
+        listeners, as presumably they are from e.g. panels. Doing that
+        seems to cause trouble (and makes no sense anyway).
+        """
+        if active:
+            if self.attribute_name_validator.isValid(name):
+                self.registry._subscribe_attribute(name, self.registry._attribute_listener)
+        else:
+            if self.attribute_name_validator.isValid(name):
+                self.registry._unsubscribe_attribute(name)
 
     def on_click(self, kind, name):
         """The default behavior is to mark a clicked device and to zoom to a clicked section.
@@ -147,32 +171,25 @@ class SynopticWidget(TaurusWidget):
         hbox.setContentsMargins(0, 0, 0, 0)
         hbox.layout().setContentsMargins(0, 0, 0, 0)
         hbox.addWidget(self._create_view(url, section))
+
         self.setLayout(hbox)
 
-    def _create_view(self, url, section=None):
+    def _create_view(self, svg, section=None):
         view = QWebView(self)
         view.setRenderHint(QtGui.QPainter.TextAntialiasing, False)
         view.setPage(LoggingWebPage())
         view.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
 
         # the HTML page that will contain the SVG
-        # path = os.path.dirname(os.path.realpath(__file__))
-        #html = QUrl(os.path.join(path, "index.html"))  # make file configurable
+        path = os.path.dirname(os.path.realpath(__file__))
+        html = QUrl(os.path.join(path, "index.html"))  # make file configurable
 
         # setup the JS interface
         frame = view.page().mainFrame()
         self.js = JSInterface(frame)
         #self.js.registered.connect(self.register)
-        #self.js.visibility.connect(self.listen)
+        self.js.visibility.connect(self.listen)
 
-        # when the page (and all the JS) has loaded, load the SVG
-        # def load_svg():
-        #     print "blorrt", self.js
-        #     self.js.load(svg, section)
-        # view.loadFinished.connect(load_svg)
-
-        # load the page
-        view.load(QUrl(url))
 
         # mouse interaction signals
         self.clicked = self.js.leftclicked
@@ -181,72 +198,18 @@ class SynopticWidget(TaurusWidget):
         # Inject JSInterface into the JS global namespace as "Widget"
         frame.addToJavaScriptWindowObject('Widget', self.js)  # confusing?
 
+        # when the page (and all the JS) has loaded, load the SVG
+        def load_svg():
+            print "blorrt", self.js
+            self.js.load(svg, section)
+        view.loadFinished.connect(load_svg)
+
+        # load the page
+        # print "url", QUrl(url)
+        view.load(html)
+
         return view
 
-    def register(self, kind, name):
-        "Connect an item in the SVG to a corresponding Tango entity"
-        print "adding Tango listener", kind, name
-        method, listener = self.mapping.get(str(kind), (None, None))
-        if method and listener:
-            return method(str(name), listener, id(self))
-
-    def listen(self, name, active=True):
-        """Turn polling on/off for a registered attribute. This does nothing
-        if events are used, but then there's no need... right?
-
-        Note: we don't want to disable polling if there are other
-        listeners, as presumably they are from e.g. panels. Doing that
-        seems to cause trouble (and makes no sense anyway).
-        """
-        try:
-            if active:
-                # TODO: a nicer way to keep track of different listener types.
-                # Ideally, there should be only one type.
-                self.registry.enable_listener(name, self._attribute_listener, id(self))
-                self.registry.enable_listener(name, self._device_listener, id(self))
-                self.registry.enable_listener(name, self._alarm_listener, id(self))
-            else:
-                self.registry.disable_listener(name, self._attribute_listener, id(self))
-                self.registry.disable_listener(name, self._device_listener, id(self))
-                self.registry.disable_listener(name, self._alarm_listener, id(self))
-        except PyTango.DevFailed as df:
-            print "Failed to update listener %s: %s" % (name, df)
-
-    ### Listener callbacks ###
-
-    def _device_listener(self, evt_src, evt_type, evt_value):
-
-        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-                        PyTango.EventType.CHANGE_EVENT):
-            name = evt_src.getNormalName()
-            if name:
-                state = evt_value.value
-                device = str(name).rsplit("/", 1)[0]
-                self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
-                                    (str(device), str(state)))
-            else:
-                print "***"
-                print "No name for", evt_value
-                print "***"
-
-    def _attribute_listener(self, evt_src, evt_type, evt_value):
-
-        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
-                        PyTango.EventType.CHANGE_EVENT):
-            name = evt_src.getNormalName()
-            if name:
-                print "attribute_listener", name
-                attr = Attribute(name)
-                fmt = attr.getFormat()
-                unit = attr.getUnit()
-                value = evt_value.value
-                if evt_value.type is PyTango._PyTango.CmdArgType.DevState:
-                    value_str = str(value)  # e.g. "ON"
-                else:
-                    value_str = fmt % value  # e.g. "2.40e-5"
-                attr_type = str(evt_value.type)
-                self.js.evaljs.emit("Synoptic.setAttribute(%r, %r, %r, %r)" %
-                                    (name, value_str, attr_type, unit))
 
     def _set_sub_alarms(self, basename):
 
@@ -292,6 +255,89 @@ class SynopticWidget(TaurusWidget):
 
 
 class Registry(object):
+
+    def __init__(self, js):
+
+        self.js = js
+        #lock = Lock()
+        self.listeners = {}
+
+    def run(self):
+        while True:
+            print "running..."
+            time.sleep(5)
+
+    def register(self, kind, name):
+        "Connect an item in the SVG to a corresponding Tango entity"
+        # print "adding Tango listener", kind, name
+        # method, listener = self.mapping.get(str(kind), (None, None))
+        # if method and listener:
+        #     return method(str(name), listener, id(self))
+
+        # try:
+        #     if active:
+        #         # TODO: a nicer way to keep track of different listener types.
+        #         # Ideally, there should be only one type.
+        #         self.registry.enable_listener(name, self._attribute_listener, id(self))
+        #         self.registry.enable_listener(name, self._device_listener, id(self))
+        #         self.registry.enable_listener(name, self._alarm_listener, id(self))
+        #     else:
+        #         self.registry.disable_listener(name, self._attribute_listener, id(self))
+        #         self.registry.disable_listener(name, self._device_listener, id(self))
+        #         self.registry.disable_listener(name, self._alarm_listener, id(self))
+        # except PyTango.DevFailed as df:
+        #     print "Failed to update listener %s: %s" % (name, df)
+
+    def _subscribe_attribute(self, attrname, callback):
+        if not attrname in self.listeners:
+            listener = TaurusWebAttribute(attrname, callback)
+            self.listeners[attrname] = listener
+
+    def _unsubscribe_attribute(self, attrname):
+        listener = self.listeners.pop(attrname, None)
+        if listener:
+            listener.clear()
+
+    ### Listener callbacks ###
+
+    def _device_listener(self, evt_src, evt_type, evt_value):
+
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            name = evt_src.getNormalName()
+            if name:
+                state = evt_value.value
+                device = str(name).rsplit("/", 1)[0]
+                self.js.evaljs.emit("Synoptic.setDeviceStatus('%s', '%s')" %
+                                    (str(device), str(state)))
+            else:
+                print "***"
+                print "No name for", evt_value
+                print "***"
+
+    def _attribute_listener(self, evt_src, evt_type, evt_value):
+
+        if evt_type in (PyTango.EventType.PERIODIC_EVENT,
+                        PyTango.EventType.CHANGE_EVENT):
+            name = evt_src.getNormalName()
+            if name:
+                print "attribute_listener", name
+                attr = Attribute(name)
+                fmt = attr.getFormat()
+                unit = attr.getUnit()
+                value = evt_value.value
+                if evt_value.type is PyTango._PyTango.CmdArgType.DevState:
+                    value_str = str(value)  # e.g. "ON"
+                else:
+                    value_str = fmt % value  # e.g. "2.40e-5"
+                attr_type = str(evt_value.type)
+                self.js.evaljs.emit("Synoptic.setAttribute('%s', '%s', '%s', '%s')" %
+                                    (name, value_str, attr_type, unit))
+
+
+
+
+class _Registry(object):
 
     """A simple 'registry' for attribute callbacks. It makes sure that no
     duplicate callbacks are registered and also takes care to stop

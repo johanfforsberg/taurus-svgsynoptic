@@ -13,120 +13,165 @@ window.Tango = window.Tango || (function () {
 
     //var ws = new WebSocket("ws://localhost:8888/taurus");
     var es;
-    var subscribe_url, unsubscribe_url;
-    setTimeout(function () {
+    var subscribe_url, unsubscribe_url, subscriptions = {};
+    function setupSSE () {
+        if (es) es.close();
         es = new EventSource("/listen");
+        console.log("es", es);
+
+        es.onopen = function () {
+            console.log("SSE connection established");
+        };
 
         // temporary listener to setup URLs
         es.onmessage = function (message) {
             var event = JSON.parse(message.data);
             console.log("event", event);
             if (event.subscribe_url) {
+                subscriptions = {};
                 subscribe_url = event.subscribe_url;
                 unsubscribe_url = event.unsubscribe_url;
-                es.onmessage = onmessage;
+                es.onmessage = onmessage;  // replace hook
+
+                //setTimeout(function () {es.close();}, 10000);
+                // Now it's safe to load the SVG and start setting up subscribers
                 Synoptic.load("/images/maxiv.svg");
                 //Synoptic.load("/images/test-pysvg2.svg");
                 //Synoptic.load("/images/example.svg");
                 //Synoptic.load("/images/femtomax.svg");
             }
         };
-    });
 
-    // "real" onmessage hook
-    var onmessage = function (message) {
-        var events = JSON.parse(message.data);
-        if (events.length) {
-            events.forEach(function (event) {
-                if (event.event_type == "value") {
-                    var attrname = getAttributeName(event.model);
-                    //console.log(attrname, event.value);
-                    // if (attrname == "State") {
-                    //     Synoptic.setDeviceState(getDeviceName(event.model), event.html);
-                    // } else {
-                        Synoptic.setAttribute(event.model, event.html);
-                    //}
-                }
-            });
-        }
-    };
+        es.onerror = function(e){
+            console.log('SSE Error', e);
+            // Try to establish a new session after a while
+            setTimeout(setupSSE, 5000);
+        };
 
-    // es.onerror = function(e){
-    //     console.log('SSE Error', e);
-    // };
+    }
 
-    // es.onopen = function () {
-    //     // Must wait for the websocket to open before starting the
-    //     // whole thing up. Would be better to load the SVG immidiately
-    //     // though.
-    // };
-
-    var models_to_register = [], models_to_unregister = [];
+    //setupSSE();
 
     function subscribe (models) {
-
-        d3.json(subscribe_url)
-            .header("Content-Type", "application/json")
-            .post(JSON.stringify({models: models}));
+        models.forEach(function (model) {
+            Widget.visible(model, true);
+        });
+        // d3.json(subscribe_url)
+        //     .header("Content-Type", "application/json")
+        //     .post(JSON.stringify({models: models}));
     }
 
     function unsubscribe (models) {
-        d3.json(unsubscribe_url)
-            .header("Content-Type", "application/json")
-            .post(JSON.stringify({models: models}));
+        models.forEach(function (model) {
+            Widget.visible(model, false);
+        });
+        // d3.json(unsubscribe_url)
+        //     .header("Content-Type", "application/json")
+        //     .post(JSON.stringify({models: models}));
     }
 
-    // batch (un)subscribing
-    setInterval(function () {
-        var models;
-        if (models_to_register.length > 0) {
-            models = models_to_register.slice();
-            console.log("registering", models);
-            models_to_register = [];
-            subscribe(models);
-        }
-        if (models_to_unregister.length > 0) {
-            models = models_to_unregister.slice();
-            console.log("unregistering", models);
-            models_to_unregister = [];
-            unsubscribe(models);
-        }
-    }, 1000);
+    var model_config = {};
 
+    // "real" onmessage hook
+    var onmessage = function (message) {
+        var events = JSON.parse(message.data), obsolete = [];
+        if (events.length) {
+            events.forEach(function (event) {
+                if (event.event_type == "value") {
+                    var callbacks = subscriptions[event.model];
+                    if (callbacks) {
+                        if (event.model in model_config) {
+                            // add stored config information to the event
+                            _.merge(event, model_config[event.model]);
+                        }
+                        callbacks.forEach(function (cb) {
+                            cb(event);
+                        });
+                    } else {
+                        obsolete.push(event.model);
+                    }
+                // store configuration events for later use
+                } else if (event.event_type == "config") {
+                    model_config[event.model] = event;
+                }
+            });
+            if (obsolete.length) {
+                unsubscribe(obsolete);
+            }
+        }
+    };
+
+    // batch (un)subscribing once per second
+    // This may be overcomplicating things...
+    // setInterval(function () {
+    //     var models;
+    //     if (to_register.length > 0) {
+    //         models = to_register.slice();
+    //         to_register = [];
+    //         subscribe(models);
+    //     }
+    //     if (to_unregister.length > 0) {
+    //         models = to_unregister.slice();
+    //         unsubscribe(models);
+    //         to_unregister = [];
+    //     }
+    // }, 1000);
 
     return {
-        // ask the server to give us updates on a model
-        register: function (model) {
-            // switch(kind) {
-            // case "attribute":
-            //     models_to_register.push(name);
-            //     break;
-            // case "device":
-            //     models_to_register.push(name);
-            //     break;
-            // case "section":
-            //     console.log("section");
-            //     break;
-            // }
-            //  return true;
 
-            models_to_register.push(model);
+        // ask the server to give us updates on a list of models
+        subscribe: function (models, callback, single) {
+            // "single" means this subscription should replace all others
+            // with the same callback. So first remove all occurances.
+            if (single) {
+                _.forEach(subscriptions, function (cbs, model) {
+                    _.remove(cbs, callback);
+                    if (cbs.length === 0) {
+                        delete subscriptions[model];
+                    }
+                });
+            }
+            // Then we add the subscription
+            var to_register = [];
+            models.forEach(function (model) {
+                if (model in subscriptions) {
+                    if (!_.contains(subscriptions[model], callback)) {
+                        subscriptions[model].push(callback);
+                        to_register.push(model);
+                    }
+                } else {
+                    subscriptions[model] = [callback];
+                    to_register.push(model);
+                }
+            });
+            if (to_register.length > 0) {
+                subscribe(to_register);
+                //Synoptic.setActive(to_register, true);
+            }
         },
-        unregister: function (model) {
-            // switch(kind) {
-            // case "attribute":
-            //     models_to_unregister.push(model);
-            //     break;
-            // case "device":
-            //     models_to_unregister.push(model);
-            //     break;
-            // case "section":
-            //     console.log("section");
-            //     break;
-            // }
-            // return true;
-            models_to_unregister.push(model);
-        }
+
+        // stop receiving updates for models
+        unsubscribe: function (models, callback) {
+            var to_unregister = [];
+            models.forEach(function (model) {
+                if (model in subscriptions &&
+                    _.contains(subscriptions[model], callback)) {
+                    console.log("unsibscribing", model, callback);
+                    var cbs = _.without(subscriptions[model], callback);
+                    if (cbs.length === 0) {
+                        delete subscriptions[model];
+                        to_unregister.push(model);
+                    } else {
+                        subscriptions[model] = cbs;
+                    }
+                }
+            });
+            if (to_unregister.length > 0) {
+                unsubscribe(to_unregister);
+                //Synoptic.setActive(to_unregister, false);
+            }
+        },
+        onmessage: onmessage
     };
 
 

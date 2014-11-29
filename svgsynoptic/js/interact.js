@@ -124,10 +124,10 @@ var Widget = window.Widget || {
                     if (match) {
                         var kind = match[1], name = match[2];
                         data[kind] = name;
-                        if (kind == "attribute")
-                            data.model = name;
-                        else if (kind == "device")
-                            data.model = name + "/State";
+                        // if (kind == "attribute")
+                        //     data.model = name;
+                        if (kind == "device")
+                            data.attribute = name + "/State";
                         // register with widget side
                         //Tango.register(data.model);
                     }
@@ -140,7 +140,7 @@ var Widget = window.Widget || {
     }
     function setupNode(node, data) {
         // We really want the parent node of the <desc>
-        console.log("setupNode "+ Object.keys(data));
+        console.log("setupNode "+ JSON.stringify(data));
         var sel = d3.select(node.parentNode)
                 .classed(data)
                 .data([data])
@@ -198,6 +198,7 @@ var Widget = window.Widget || {
         });
         return classes;
     };
+    var no_state_classes = getStateClasses();
 
     // Set an attribute value
     function setAttribute(attrname, value_str, type, unit) {
@@ -212,6 +213,7 @@ var Widget = window.Widget || {
             // Treat the "State" attribute specially
             sel.classed(getStateClasses(value_str));
         } else {
+
             sel.text(value_str + (unit? " " + unit: ""));
         }
         // A bit of a hack...
@@ -295,46 +297,99 @@ var Widget = window.Widget || {
             .classed("selection", true);
     }
 
+
     // Check which things are in view and need to get updates
     function _updateActive (svg, bbox) {
 
-        console.log("updateActive");
+        var inside = [], outside = [];
 
         // TODO: Do this in a smarter way...
 
         // make sure all is disabled in non-selected layers
-        svg.selectAll(".layer:not(.active) .attribute, .layer:not(.active) .device ")
+        svg.selectAll(".layer:not(.active) .attribute, " +
+                      ".layer:not(.active) .device ")
+            //.classed(no_state_classes)
             .classed("active", false)
             .each(function (d) {
-                //Widget.visible(d.attribute || (d.device + "/State"), false);
-                //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
-                Tango.unregister(d.model);
+                outside.push(d.attribute);
             });
 
         // disable stuff in invisible zoom levels
-        svg.selectAll(".layer.active > .zoom:not(.active) .attribute, .layer.active > .zoom:not(.active) .device")
+        svg.selectAll(".layer.active > .zoom:not(.active) .attribute, " +
+                      ".layer.active > .zoom:not(.active) .device")
+            //.classed(no_state_classes)
             .classed("active", false)
             .each(function (d) {
-                //Widget.visible(d.attribute || (d.device + "/State"), false);
-                //Tango.unregister("attribute", d.attribute || (d.device + "/State"), false);
-                Tango.unregister(d.model);
+                outside.push(d.attribute);
             });
 
         // finally enable things that are in view
-        svg.selectAll(".layer.active > .zoom.active .attribute, .layer.active > .zoom.active .device")
+        svg.selectAll(".layer.active > .zoom.active .attribute, " +
+                      ".layer.active > .zoom.active .device")
             .classed("active", function (d) {
                 var visible = isInView(this, bbox);
                 if (visible) {
-                    //Tango.register("attribute", d.attribute || (d.device + "/State"));
-                    Tango.register(d.model);
+                    inside.push(d.attribute);
                 } else {
-                    //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
-                    Tango.unregister(d.model);
+                    outside.push(d.attribute);
                 }
-                //Widget.visible(d.attribute || (d.device + "/State"), visible);
                 return visible;
+            })
+            .each(function (d) {
+                var sel = d3.select(this);
+                if (!sel.classed("active"))
+                    sel.classed(no_state_classes);
             });
+
+        // get rid of duplicates
+        inside = _.uniq(inside);
+        outside = _.uniq(outside);
+
+        Tango.subscribe(inside, setAttribute);
+        // don't unsubscribe things in view (there can be several instances)
+        Tango.unsubscribe(_.without(outside, inside), setAttribute);
     }
+
+    // // Check which things are in view and need to get updates
+    // function _updateActive (svg, bbox) {
+
+
+    //     // TODO: Do this in a smarter way...
+
+    //     // make sure all is disabled in non-selected layers
+    //     svg.selectAll(".layer:not(.active) .attribute, .layer:not(.active) .device ")
+    //         .classed("active", false)
+    //         .each(function (d) {
+    //             //Widget.visible(d.attribute || (d.device + "/State"), false);
+    //             //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
+    //             Tango.unregister(d.attribute);
+    //         });
+
+    //     // disable stuff in invisible zoom levels
+    //     svg.selectAll(".layer.active > .zoom:not(.active) .attribute, .layer.active > .zoom:not(.active) .device")
+    //         .classed("active", false)
+    //         .each(function (d) {
+    //             //Widget.visible(d.attribute || (d.device + "/State"), false);
+    //             //Tango.unregister("attribute", d.attribute || (d.device + "/State"), false);
+    //             Tango.unregister(d.attribute);
+    //         });
+
+    //     // finally enable things that are in view
+    //     svg.selectAll(".layer.active > .zoom.active .attribute, .layer.active > .zoom.active .device")
+    //         .classed("active", function (d) {
+    //             var visible = isInView(this, bbox);
+    //             if (visible) {
+    //                 //Tango.register("attribute", d.attribute || (d.device + "/State"));
+    //                 console.log("isInView: " + d.model);
+    //                 Tango.register(d.attribute);
+    //             } else {
+    //                 //Tango.unregister("attribute", d.attribute || (d.device + "/State"));
+    //                 Tango.unregister(d.attribute);
+    //             }
+    //             //Widget.visible(d.attribute || (d.device + "/State"), visible);
+    //             return visible;
+    //         });
+    // }
 
     // The above could becone a bit heavy because a lot of elements
     // are looped through.  Limit update frequency a bit since it's

@@ -112,23 +112,13 @@ class SynopticWidget(TaurusWidget):
 
     def __init__(self, parent=None, *args, **kwargs):
         super(SynopticWidget, self).__init__(parent)
-
-        self.listeners = {} #WeakValueDictionary()
         self.attribute_name_validator = AttributeNameValidator()
 
-
     def setModel(self, svg, section=None):
-        #self._svg_file = svg
-        # print "setModel", url
         self._svg = svg
         self._setup_ui(svg, section)
         self.registry = Registry()
         self.registry.start()
-
-        synoptic = self
-        synoptic.clicked.connect(self.on_click)
-        synoptic.rightClicked.connect(self.on_rightclick)
-        synoptic.show()
 
     def getModel(self):
         return self._url
@@ -167,6 +157,9 @@ class SynopticWidget(TaurusWidget):
         hbox.addWidget(self._create_view(url, section))
 
         self.setLayout(hbox)
+        self.js.leftclicked.connect(self.on_click)
+        self.js.rightclicked.connect(self.on_rightclick)
+
 
     def _create_view(self, svg, section=None):
         view = QWebView(self)

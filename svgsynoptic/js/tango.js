@@ -137,8 +137,8 @@ window.Tango = window.Tango || (function () {
                 if (model in subscriptions) {
                     if (!_.contains(subscriptions[model], callback)) {
                         subscriptions[model].push(callback);
-                        to_register.push(model);
                     }
+                    to_register.push(model);
                 } else {
                     subscriptions[model] = [callback];
                     to_register.push(model);
@@ -170,8 +170,7 @@ window.Tango = window.Tango || (function () {
                 unsubscribe(to_unregister);
                 //Synoptic.setActive(to_unregister, false);
             }
-        },
-        onmessage: onmessage
+        }
     };
 
 

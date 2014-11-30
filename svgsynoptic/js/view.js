@@ -117,7 +117,7 @@ var Synoptic = window.Synoptic || {};
             }
             old_zoom_level = zoom_level;
 
-            setTimeout(function () {changed.dispatch(getBoundingBox())}, 1);
+            changed.dispatch(getBoundingBox());
         }
 
         // setup mouse zoom behavior
@@ -130,11 +130,7 @@ var Synoptic = window.Synoptic || {};
             var scale = Math.min(cont_width / bbox.width,
                                  cont_height / bbox.height),
                 translate = [cont_width / 2 - scale * (bbox.x + bbox.width / 2),
-                             cont_height / 2 - scale * (bbox.y + bbox.height / 2)];
-            console.log("setZoom", bbox, scale);
-            console.log("scale", scale);
-            console.log("translate", translate, cont_width, cont_height);
-            return zoom.scale(scale).translate(translate); //.scale(scale);
+                             cont_height / 2 - scale * (bbox.y + bbox.height / 2)];            return zoom.scale(scale).translate(translate); //.scale(scale);
         };
 
         svg.call(zoom);

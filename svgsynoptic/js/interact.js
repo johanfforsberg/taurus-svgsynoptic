@@ -317,18 +317,18 @@ var Widget = window.Widget || {
         // TODO: Do this in a smarter way...
 
         // make sure all is disabled in non-selected layers
-        svg.selectAll(".layer:not(.active) .attribute, " +
-                      ".layer:not(.active) .device ")
-            //.classed(no_state_classes)
+        svg.selectAll(".layer:not(.active) .attribute.active, " +
+                      ".layer:not(.active) .device.active ")
+            .classed(no_state_classes)
             .classed("active", false)
             .each(function (d) {
                 outside.push(d.attribute);
             });
 
         // disable stuff in invisible zoom levels
-        svg.selectAll(".layer.active > .zoom:not(.active) .attribute, " +
-                      ".layer.active > .zoom:not(.active) .device")
-            //.classed(no_state_classes)
+        svg.selectAll(".layer.active > .zoom:not(.active) .attribute.active, " +
+                      ".layer.active > .zoom:not(.active) .device.active")
+            .classed(no_state_classes)
             .classed("active", false)
             .each(function (d) {
                 outside.push(d.attribute);
@@ -336,7 +336,9 @@ var Widget = window.Widget || {
 
         // finally enable things that are in view
         svg.selectAll(".layer.active > .zoom.active .attribute, " +
-                      ".layer.active > .zoom.active .device")
+                      ".layer.active > .zoom.active .device, " +
+                      "#background > .zoom.active .attribute, " +
+                      "#background > .zoom.active .device")
             .classed("active", function (d) {
                 var visible = isInView(this, bbox);
                 if (visible) {
@@ -356,10 +358,10 @@ var Widget = window.Widget || {
         inside = _.uniq(inside);
         outside = _.uniq(outside);
 
-        Tango.subscribe(inside, setAttribute);
         // don't unsubscribe things also in view
         // (there can be several instances)
         Tango.unsubscribe(_.without(outside, inside), setAttribute);
+        Tango.subscribe(inside, setAttribute);
     }
 
     // The above could becone a bit heavy because a lot of elements
@@ -373,8 +375,6 @@ var Widget = window.Widget || {
     function isInView(el, vbox) {
         var bbox = util.transformedBoundingBox(el);
         vbox = vbox || bbox;
-        // TODO: change this so that partially visible devices are counted as visible.
-        // This is done on purpose to simplify debugging for now.
         var result = (bbox.x > -vbox.x - bbox.width &&
                       bbox.y > -vbox.y - bbox.height &&
                       bbox.x < -vbox.x + vbox.width &&

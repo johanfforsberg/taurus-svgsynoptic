@@ -4,14 +4,15 @@ var Synoptic = window.Synoptic || {};
 
 // Mock widget (for when we have no python backend)
 var Widget = window.Widget || {
-    register: function (kind, dev) {console.log("register " + dev); return true;},
+
     left_click: function (kind, name) {
+        console.log("left_click");
         if (kind === "section")
             Synoptic.view.zoomTo(kind, name);
         if (kind === "device")
             Synoptic.selectDevice(name);
     },
-    right_click: function () {},
+    right_click: function () {console.log("rightclick");},
     set_listening: function () {}
 };
 
@@ -49,13 +50,17 @@ var Widget = window.Widget || {
                 var node = d3.select(this),
                     name = d3.select(this).attr("inkscape:label"),
                     match = /zoom(\d)/.exec(name);
-                console.log("zoom level", name);
                 if (match) {
                     var level = parseInt(match[1]);
+                    console.log("zoom level", name, level);
                     node.classed("zoom", true);
                     node.classed("level"+level, true);
                 }
             });
+
+        if (svg.select("g").attr("transform"))
+            console.log("*Warning* there is a transform on the 'main' layer/group in the SVG. " +
+                        "This is likely to mess up positioning of some things.");
 
 
         // Remove inline styles from symbols, to make sure they will
@@ -80,7 +85,7 @@ var Widget = window.Widget || {
         // problems back.
     }
 
-    // Register all devices, attributes, etc with the Tango side
+    // Set the SVG file up for interaction with the Tango side
     function register (svg) {
 
         // go through the svg and find all <desc> elements containing
@@ -89,6 +94,8 @@ var Widget = window.Widget || {
         // This makes it convenient to use D3.js to iterate over things.
         var pattern = /^(device|attribute|section|alarm)=(.*)/;
 
+        //svg.call(tooltip);
+
         svg.selectAll("desc")
             .each(function () {
                 var lines = this.textContent.split("\n"),
@@ -96,26 +103,32 @@ var Widget = window.Widget || {
                 lines.forEach(function (line) {
                     var match = pattern.exec(line);
                     if (match) {
-                        var kind = match[1], name = match[2];
+                        var kind = match[1].trim(), name = match[2].trim();
                         data[kind] = name;
-                        // register with widget side
-                        Widget.register(kind, name);
+                        if (kind == "device") {
+                            // For devices, we assume that the "status" attribute
+                            // is interesting. This saves a lot of typing.
+                            data.attribute = name + "/State";
+                        }
                     }
                 }, this);
                 if (data) setupNode(this, data);
             });;
 
+        updateActive(svg);
     }
+
+    // Setup the interactivity
     function setupNode(node, data) {
+        console.log("setupNode "+ JSON.stringify(data));
         // We really want the parent node of the <desc>
-        console.log("setupNode "+ Object.keys(data));
         var sel = d3.select(node.parentNode)
-            .classed(data)
-            .data([data])
-        // mouse interactions
-            .on("mouseover", showTooltip)
-            .on("mousemove", updateTooltip)
-            .on("mouseout", hideTooltip)
+                .classed(data)
+                .data([data])
+                // mouse interactions
+                .on("mouseover", showTooltip)
+                .on("mousemove", moveTooltip)
+                .on("mouseout", hideTooltip)
             .on("click", function () {
                 if (d3.event.defaultPrevented) return;
                 Object.keys(data).forEach(function (kind) {
@@ -130,46 +143,82 @@ var Widget = window.Widget || {
             });
     }
 
+    // === Tooltip helpers ===
+
+    // Template for the tooltip
+    var tooltip_content = Handlebars.compile(
+        "<table>" +
+            "{{#if device}}" +
+               '<tr><td class="label">Device:</td><td class="value">{{device}}</td></tr>' +
+               '<tr><td class="label">State:</td><td class="value">{{value}}</td></tr>' +
+            "{{else}}" +
+                "{{#if attribute}}" +
+                   '<tr><td class="label">Attribute:</td><td class="value">{{attribute}}</td></tr>' +
+                   '<tr><td class="label">Value:</td><td class="value">{{value}}</td></tr>' +
+                "{{/if}}" +
+            "{{/if}}" +
+            "{{#if section}}" +
+                '<tr><td class="label">Section:</td><td class="value">{{section}}</td></tr>' +
+            "{{/if}}" +
+        "</table>"
+    );
+
+    var tooltip = d3.select("#synoptic div.tooltip");
+
     function showTooltip(info) {
-        d3.select("#synoptic div.tooltip")
-            .html(function (d) {
-                return (info.device? "device: " + info.device + "<br>" : "") +
-                    (info.attribute? "attribute: " + info.attribute + "<br>" : "") +
-                    (info.section? "section: " + info.section + "<br>" : "");
-                })
+        tooltip
+            .html(function () {return tooltip_content(info);})
+            //.html(info.attribute || info.section || "Not defined")
             .style("visibility", "visible");
     }
 
-    function updateTooltip() {
-        d3.select("#synoptic div.tooltip")
-            .style("left", d3.event.clientX + 10)
-            .style("top", d3.event.clientY + 10);
+    function moveTooltip() {
+        // try to maximize the odds that the tooltip fits on screen...
+        if (d3.event.clientX > window.innerWidth/2) {
+            tooltip
+                .style("left", d3.event.clientX - 10 - tooltip.node().clientWidth)
+                .style("top", d3.event.clientY + 10);
+        } else {
+            tooltip
+                .style("left", d3.event.clientX + 10)
+                .style("top", d3.event.clientY + 10);
+        }
     }
 
     function hideTooltip() {
-        d3.select("#synoptic div.tooltip")
+        tooltip
             .style("visibility", "hidden");
     }
 
+    // ====
+
+    // return nodes corresponding to a given kind ("device", "attribute", etc)
+    // and name (e.g. device/attribute name).
     function getNodes(kind, name) {
         return d3.selectAll("#synoptic svg ." + kind)
             .filter(function (d) {return d[kind] == name;});
     }
 
-    // Set the status class of a device
-    var statuses = ["UNKNOWN", "INIT", "RUNNING", "MOVING",
-                    "ON", "OFF", "INSERT", "EXTRACT", "OPEN", "CLOSE",
-                    "STANDBY", "ALARM", "FAULT", "DISABLE"];
-    function getStatusClasses(status) {
+    // Set the state class of a device
+    var states = ["UNKNOWN", "INIT", "RUNNING", "MOVING",
+                  "ON", "OFF", "INSERT", "EXTRACT", "OPEN", "CLOSE",
+                  "STANDBY", "ALARM", "FAULT", "DISABLE"];
+    function getStateClasses(state) {
         var classes = {};
-        statuses.forEach(function (s) {
-            classes["status-" + s] = s == status;
+        states.forEach(function (s) {
+            classes["state-" + s] = s == state;
         });
         return classes;
     };
+    var no_state_classes = getStateClasses();
 
     // Set an attribute value
-    function setAttribute(attrname, value_str, type, unit) {
+    function updateAttribute(event) {
+
+        var attrname = event.model,
+            value_str = event.html,
+            unit = event.unit,
+            type = event.type;
 
         var sel = getNodes("attribute", attrname);
 
@@ -178,18 +227,50 @@ var Widget = window.Widget || {
                 classes = {"boolean-true": value, "boolean-false": !value};
             sel.classed(classes);
         } else if (type == "DevState") {
-            // Treat the "Status" attribute specially
-            sel.classed(getStatusClasses(value_str));
+            // Treat the "State" attribute specially
+            sel.classed(getStateClasses(value_str));
         } else {
             sel.text(value_str + (unit? " " + unit: ""));
         }
+        // A bit of a hack...
+        var d = sel.datum();
+        if (d) {
+            d["value"] = value_str;
+            d["unit"] = unit;
+        }
     };
 
-    function setDeviceStatus(devname, value) {
+
+    // Set an attribute value
+    function setAttribute(attrname, value_str, type, unit) {
+
+        console.log("setAttribute");
+
+        var sel = getNodes("attribute", attrname);
+
+        if (type == "DevBoolean") {
+            var value = parseFloat(value_str) !== 0.0,
+                classes = {"boolean-true": value, "boolean-false": !value};
+            sel.classed(classes);
+        } else if (type == "DevState") {
+            // Treat the "State" attribute specially
+            sel.classed(getStateClasses(value_str));
+        } else {
+
+            sel.text(value_str + (unit? " " + unit: ""));
+        }
+        // A bit of a hack...
+        var d = sel.datum();
+        d["value"] = value_str;
+        d["unit"] = unit;
+    };
+
+    function setDeviceState(devname, value) {
         var sel = getNodes("device", devname);
-        sel.classed(getStatusClasses(value));
+        sel.classed(getStateClasses(value));
+        var d = sel.datum();
+        d["state"] = value;
     };
-
 
     // find the name of the layer where a node belongs
     function getNodeLayer(node) {
@@ -241,10 +322,8 @@ var Widget = window.Widget || {
             .remove();
     }
 
-    // visually mark a device as "selected"
+    // visually mark something as "selected"
     function select(kind, name) {
-
-        console.log("select " + kind + " " + name);
 
         var node = getNodes(kind, name).node(),
             parent = node.parentNode,
@@ -260,34 +339,60 @@ var Widget = window.Widget || {
             .classed("selection", true);
     }
 
+
     // Check which things are in view and need to get updates
     function _updateActive (svg, bbox) {
 
-        console.log("updateActive");
+        var inside = [], outside = [];
 
         // TODO: Do this in a smarter way...
 
         // make sure all is disabled in non-selected layers
-        svg.selectAll(".layer:not(.active) .attribute, .layer:not(.active) .device ")
+        svg.selectAll(".layer:not(.active) .attribute.active, " +
+                      ".layer:not(.active) .device.active ")
+            .classed(no_state_classes)
             .classed("active", false)
             .each(function (d) {
-                Widget.visible(d.attribute || (d.device + "/State"), false);
+                outside.push(d.attribute);
             });
 
         // disable stuff in invisible zoom levels
-        svg.selectAll(".layer.active > .zoom:not(.active) .attribute, .layer.active > .zoom:not(.active) .device")
+        svg.selectAll(".layer.active > .zoom:not(.active) .attribute.active, " +
+                      ".layer.active > .zoom:not(.active) .device.active")
+            .classed(no_state_classes)
             .classed("active", false)
             .each(function (d) {
-                Widget.visible(d.attribute || (d.device + "/State"), false);
+                outside.push(d.attribute);
             });
 
         // finally enable things that are in view
-        svg.selectAll(".layer.active > .zoom.active .attribute, .layer.active > .zoom.active .device")
+        svg.selectAll(".layer.active > .zoom.active .attribute, " +
+                      ".layer.active > .zoom.active .device, " +
+                      "#background > .zoom.active .attribute, " +
+                      "#background > .zoom.active .device")
             .classed("active", function (d) {
                 var visible = isInView(this, bbox);
-                Widget.visible(d.attribute || (d.device + "/State"), visible);
+                if (visible) {
+                    inside.push(d.attribute);
+                } else {
+                    outside.push(d.attribute);
+                }
                 return visible;
+            })
+            .each(function (d) {
+                var sel = d3.select(this);
+                if (!sel.classed("active"))
+                    sel.classed(no_state_classes);
             });
+
+        // get rid of duplicates
+        inside = _.uniq(inside);
+        outside = _.uniq(outside);
+
+        // don't unsubscribe things also in view
+        // (there can be several instances)
+        Tango.unsubscribe(_.without(outside, inside), updateAttribute);
+        Tango.subscribe(inside, updateAttribute);
     }
 
     // The above could becone a bit heavy because a lot of elements
@@ -300,8 +405,7 @@ var Widget = window.Widget || {
     // return whether a given element is currently in view
     function isInView(el, vbox) {
         var bbox = util.transformedBoundingBox(el);
-        // TODO: change this so that partially visible devices are counted as visible.
-        // This is done on purpose to simplify debugging for now.
+        vbox = vbox || bbox;
         var result = (bbox.x > -vbox.x - bbox.width &&
                       bbox.y > -vbox.y - bbox.height &&
                       bbox.x < -vbox.x + vbox.width &&
@@ -315,7 +419,7 @@ var Widget = window.Widget || {
     Synoptic.register = register;
     Synoptic.updateActive = updateActive;
     Synoptic.setAttribute = setAttribute;
-    Synoptic.setDeviceStatus = setDeviceStatus;
+    Synoptic.setDeviceState = setDeviceState;
     Synoptic.setAlarm = setAlarm;
     Synoptic.setSubAlarm = setSubAlarm;
     Synoptic.unselectAll = unselectAll;

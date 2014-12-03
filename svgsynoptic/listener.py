@@ -8,7 +8,7 @@ Manager().changeDefaultPollingPeriod(1000)
 def error_str(err):
     if isinstance(err, PyTango.DevFailed):
         err = err[0]
-        return "[{0}] {1}".format(err.reason, err.desc)
+        return "[{0}] {1}".format(err.reason, err.desc.replace("\n", "\\n"))
     return str(err)
 
 
@@ -27,16 +27,19 @@ class TaurusWebAttribute(object):
         self._last_time = 0
         self.last_value_event = None
         self.last_config_event = None
-        self.attribute.addListener(self)
+        try:
+            self.attribute.addListener(self)
+        except PyTango.DevFailed:
+            pass
 
     @property
     def attribute(self):
         return Attribute(self.name)
 
-    def eventReceived(self, evt_src, evt_type, evt_value):
-        self.callback(evt_src, evt_type, evt_value)
+    # def eventReceived(self, evt_src, evt_type, evt_value):
+    #     self.callback(evt_src, evt_type, evt_value)
 
-    def _eventReceived(self, evt_src, evt_type, evt_value):
+    def eventReceived(self, evt_src, evt_type, evt_value):
         """Transforms the event into a JSON encoded string and sends this
         string into the web socket"""
 
@@ -97,4 +100,7 @@ class TaurusWebAttribute(object):
         self.callback(message)
 
     def clear(self):
-        self.attribute.removeListener(self)
+        try:
+            self.attribute.removeListener(self)
+        except PyTango.DevFailed:
+            pass

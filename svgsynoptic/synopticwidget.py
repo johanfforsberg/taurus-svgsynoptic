@@ -4,6 +4,7 @@ It allows navigation in the form of zooming, panning and clicking
 various areas to zoom in.
 """
 
+import json
 import logging
 import os
 import time
@@ -48,7 +49,7 @@ class JSInterface(QtCore.QObject):
         self.evaljs.connect(self.evaluate_js)  # thread safety
 
     def evaluate_js(self, js):
-        print "JS", js
+        #print "JS", js
         with self.lock:
             self.frame.evaluateJavaScript(js)
 
@@ -131,11 +132,10 @@ class SynopticWidget(TaurusWidget):
         listeners, as presumably they are from e.g. panels. Doing that
         seems to cause trouble (and makes no sense anyway).
         """
-        if active:
-            if self.attribute_name_validator.isValid(name):
+        if self.registry and self.attribute_name_validator.isValid(name):
+            if active:
                 self.registry.subscribe_attribute(name, self._attribute_listener)
-        else:
-            if self.attribute_name_validator.isValid(name):
+            else:
                 self.registry.unsubscribe_attribute(name)
 
     def on_click(self, kind, name):
@@ -230,7 +230,11 @@ class SynopticWidget(TaurusWidget):
                 print "No name for", evt_value
                 print "***"
 
-    def _attribute_listener(self, evt_src, evt_type, evt_value):
+
+    def _attribute_listener(self, event):
+        self.js.evaljs.emit("Tango.onmessage('%s')" % json.dumps(event))
+
+    def __attribute_listener(self, evt_src, evt_type, evt_value):
 
         if evt_type in (PyTango.EventType.PERIODIC_EVENT,
                         PyTango.EventType.CHANGE_EVENT):

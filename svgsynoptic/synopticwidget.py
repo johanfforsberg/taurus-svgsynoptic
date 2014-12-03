@@ -321,10 +321,10 @@ class Registry(Thread):
         # remove
 
     def subscribe_attribute(self, attrname, callback):
-        self.to_subscribe.put((attrname, callback))
+        self.to_subscribe.put((str(attrname), callback))
 
     def unsubscribe_attribute(self, attrname):
-        self.to_unsubscribe.put(attrname)
+        self.to_unsubscribe.put(str(attrname))
 
     def _subscribe_attribute(self, attrname, callback):
         if not attrname in self.listeners:

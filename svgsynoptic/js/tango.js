@@ -9,6 +9,53 @@ window.Tango = window.Tango || (function () {
         return parts[0] + "/" + parts[1] + "/" + parts[2];
     }
 
+    var debug_content = Handlebars.compile(
+        "Listeners (press D to hide)" +
+        '<table>' +
+            '<thead>' +
+                '<tr><td>Attribute</td><td>l</td>' +
+                '<td>&Delta;t</td><td>c</td></tr>' +
+            '</thead><tbody>' +
+            '{{#each subs}}' +
+                "<tr><td>{{model}}</td><td>{{callbacks}}</td>" +
+                "<td>{{last_event}}</td><td>{{config}}</td></tr>" +
+            "{{/each}}" +
+            "<tbody>" +
+        "</table>"
+    );
+
+    var debug = d3.select("#debug");
+    var debug_interval;
+    function toggleDebug() {
+        if (debug_interval) {
+            console.log("hide debug");
+            clearInterval(debug_interval);
+            debug_interval = null;
+            debug.style("display", "none");
+        } else {
+            console.log("start debug");
+            debug_interval = setInterval(function () {
+                var subs = _.map(subscriptions, function (cbs, model) {
+                    var time = (last_events[model]?
+                                Math.round((new Date).getTime()/1000 - last_events[model].time) : "-");
+                    return {model: model, callbacks: cbs.length,
+                            last_event: time,
+                            config: model_config[model]? true: false};
+                });
+                debug.html(debug_content({subs: subs}));
+            }, 1000);
+            debug.style("display", "block");
+        }
+    }
+    window.addEventListener("keydown", function (event) {
+        console.log(event.which);
+        var char = String.fromCharCode(event.keyCode || event.which);
+        if (event.which === 68) {
+            toggleDebug();
+        }
+    });
+
+
     // setup the websocket communication
 
     //var ws = new WebSocket("ws://localhost:8888/taurus");
@@ -70,34 +117,30 @@ window.Tango = window.Tango || (function () {
         //     .post(JSON.stringify({models: models}));
     }
 
-    var model_config = {};
+    var model_config = {}, last_events = {};
 
     // "real" onmessage hook
     var onmessage = function (message) {
-        var events = JSON.parse(message.data), obsolete = [];
-        if (events.length) {
-            events.forEach(function (event) {
-                if (event.event_type == "value") {
-                    var callbacks = subscriptions[event.model];
-                    if (callbacks) {
-                        if (event.model in model_config) {
-                            // add stored config information to the event
-                            _.merge(event, model_config[event.model]);
-                        }
-                        callbacks.forEach(function (cb) {
-                            cb(event);
-                        });
-                    } else {
-                        obsolete.push(event.model);
-                    }
-                // store configuration events for later use
-                } else if (event.event_type == "config") {
-                    model_config[event.model] = event;
+
+        var event = JSON.parse(message), obsolete = [];
+
+        if (event.event_type == "value") {
+            var callbacks = subscriptions[event.model];
+            if (callbacks) {
+                if (event.model in model_config) {
+                    // add stored config information to the event
+                    _.merge(event, model_config[event.model]);
                 }
-            });
-            if (obsolete.length) {
-                unsubscribe(obsolete);
+                callbacks.forEach(function (cb) {
+                    cb(event);
+                });
+                last_events[event.model] = event;
+            } else {
+                obsolete.push(event.model);
             }
+            // store configuration events for later use
+        } else if (event.event_type == "config") {
+            model_config[event.model] = event;
         }
     };
 
@@ -156,7 +199,7 @@ window.Tango = window.Tango || (function () {
             models.forEach(function (model) {
                 if (model in subscriptions &&
                     _.contains(subscriptions[model], callback)) {
-                    console.log("unsibscribing", model, callback);
+
                     var cbs = _.without(subscriptions[model], callback);
                     if (cbs.length === 0) {
                         delete subscriptions[model];
@@ -170,7 +213,9 @@ window.Tango = window.Tango || (function () {
                 unsubscribe(to_unregister);
                 //Synoptic.setActive(to_unregister, false);
             }
-        }
+        },
+
+        onmessage: onmessage
     };
 
 

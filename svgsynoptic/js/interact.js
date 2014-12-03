@@ -213,7 +213,38 @@ var Widget = window.Widget || {
     var no_state_classes = getStateClasses();
 
     // Set an attribute value
+    function updateAttribute(event) {
+
+        var attrname = event.model,
+            value_str = event.html,
+            unit = event.unit,
+            type = event.type;
+
+        var sel = getNodes("attribute", attrname);
+
+        if (type == "DevBoolean") {
+            var value = parseFloat(value_str) !== 0.0,
+                classes = {"boolean-true": value, "boolean-false": !value};
+            sel.classed(classes);
+        } else if (type == "DevState") {
+            // Treat the "State" attribute specially
+            sel.classed(getStateClasses(value_str));
+        } else {
+            sel.text(value_str + (unit? " " + unit: ""));
+        }
+        // A bit of a hack...
+        var d = sel.datum();
+        if (d) {
+            d["value"] = value_str;
+            d["unit"] = unit;
+        }
+    };
+
+
+    // Set an attribute value
     function setAttribute(attrname, value_str, type, unit) {
+
+        console.log("setAttribute");
 
         var sel = getNodes("attribute", attrname);
 
@@ -360,8 +391,8 @@ var Widget = window.Widget || {
 
         // don't unsubscribe things also in view
         // (there can be several instances)
-        Tango.unsubscribe(_.without(outside, inside), setAttribute);
-        Tango.subscribe(inside, setAttribute);
+        Tango.unsubscribe(_.without(outside, inside), updateAttribute);
+        Tango.subscribe(inside, updateAttribute);
     }
 
     // The above could becone a bit heavy because a lot of elements

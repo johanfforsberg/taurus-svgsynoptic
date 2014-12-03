@@ -68,3 +68,29 @@ div.layer-selector.active {
 div.layer-selector.alarm {
     background: red;
 }
+
+#debug {
+    display: none;
+    color: white;
+    font-weight: bold;
+    pointer-events: none;
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    padding: 10px;
+    background: rgba(0,0,0,0.5);
+}
+
+#debug table {
+    border-top: 1px solid white;
+}
+
+#debug table thead {
+    font-weight: bold;
+}
+
+#debug * {
+    font-size: small;
+    color: white;
+    line-height: 75%;
+}

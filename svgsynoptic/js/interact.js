@@ -115,7 +115,7 @@ var Widget = window.Widget || {
                 if (data) setupNode(this, data);
             });;
 
-        updateActive(svg);
+        //setInterval(function () {console.log("hej"), updateActive(svg);}, 1000);
     }
 
     // Setup the interactivity
@@ -368,6 +368,7 @@ var Widget = window.Widget || {
         // finally enable things that are in view
         svg.selectAll(".layer.active > .zoom.active .attribute, " +
                       ".layer.active > .zoom.active .device, " +
+                      ".layer.active > .attribute, .layer.active > .device, " +
                       "#background > .zoom.active .attribute, " +
                       "#background > .zoom.active .device")
             .classed("active", function (d) {
@@ -405,7 +406,7 @@ var Widget = window.Widget || {
     // return whether a given element is currently in view
     function isInView(el, vbox) {
         var bbox = util.transformedBoundingBox(el);
-        vbox = vbox || bbox;
+        //vbox = vbox || bbox;
         var result = (bbox.x > -vbox.x - bbox.width &&
                       bbox.y > -vbox.y - bbox.height &&
                       bbox.x < -vbox.x + vbox.width &&

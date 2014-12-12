@@ -5,7 +5,7 @@ var Synoptic = window.Synoptic || {};
 
 (function () {
 
-    var zoom_to_duration = 750, max_zoom = 40;
+    var zoom_to_duration = 250, max_zoom = 40;
 
     // Setup view interactions and insert the SVG into the page
     function View(svg, section) {

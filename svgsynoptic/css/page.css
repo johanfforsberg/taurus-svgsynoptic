@@ -69,16 +69,25 @@ div.layer-selector.alarm {
     background: red;
 }
 
-#debug {
+.debug {
     display: none;
     color: white;
-    font-weight: bold;
     pointer-events: none;
     position: absolute;
+    padding: 5px;
+    background: rgba(0,0,0,0.5);
+}
+
+#debug {
     top: 0px;
     left: 0px;
-    padding: 10px;
-    background: rgba(0,0,0,0.5);
+}
+
+#debug2 {
+    font-size: x-small;
+    max-width: 50%;
+    top: 0px;
+    right: 0px;
 }
 
 #debug table {

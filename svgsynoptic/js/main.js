@@ -22,7 +22,7 @@ var Synoptic = window.Synoptic || {};
         sel.changed.add(function () {
             Synoptic.updateActive(svg, view.getBoundingBox());
         });
-
+        Synoptic.updateActive(svg, view.getBoundingBox());
         // var book = new Synoptic.Bookmarks(view, thumb);
     };
 

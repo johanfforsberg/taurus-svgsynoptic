@@ -117,22 +117,16 @@ class SynopticWidget(TaurusWidget):
 
     def setModel(self, svg, section=None):
         self._svg = svg
-        self._setup_ui(svg, section)
         self.registry = Registry()
         self.registry.start()
+        self._setup_ui(svg, section)
 
     def getModel(self):
         return self._url
 
     def listen(self, name, active=True):
-        """Turn polling on/off for a registered attribute. This does nothing
-        if events are used, but then there's no need... right?
-
-        Note: we don't want to disable polling if there are other
-        listeners, as presumably they are from e.g. panels. Doing that
-        seems to cause trouble (and makes no sense anyway).
-        """
-        if self.registry and self.attribute_name_validator.isValid(name):
+        ""
+        if self.attribute_name_validator.isValid(name):
             if active:
                 self.registry.subscribe_attribute(name, self._attribute_listener)
             else:
@@ -176,7 +170,6 @@ class SynopticWidget(TaurusWidget):
         self.js = JSInterface(frame)
         #self.js.registered.connect(self.register)
         self.js.visibility.connect(self.listen)
-
 
         # mouse interaction signals
         self.clicked = self.js.leftclicked
@@ -232,6 +225,8 @@ class SynopticWidget(TaurusWidget):
 
 
     def _attribute_listener(self, event):
+        # TODO: seems like multiline strings need more escaping, else
+        # evaljs complains about "SyntaxError: Expected token ')'"
         self.js.evaljs.emit("Tango.onmessage('%s')" % json.dumps(event))
 
     def __attribute_listener(self, evt_src, evt_type, evt_value):
@@ -285,12 +280,17 @@ class SynopticWidget(TaurusWidget):
         self.registry.join()
         del self.registry
 
+    def sendDebugMessage(self, msg):
+        self.js.evaljs.emit("Tango.debugMessage(%r)" % msg)
+
 
 class Registry(Thread):
 
     """This is a separate thread that takes care of sub- and unsubscribing
     to attributes. This in order to keep the UI thread running smoothly event
     if we're setting up lots of listeners at once."""
+
+    lock = Lock()
 
     def __init__(self):
         Thread.__init__(self)
@@ -309,12 +309,17 @@ class Registry(Thread):
         self.running = True
         while self.running:
             time.sleep(1.0)
-            while not self.to_subscribe.empty():
-                attr, callback = self.to_subscribe.get()
-                self._subscribe_attribute(attr, callback)
-            while not self.to_unsubscribe.empty():
-                attr = self.to_unsubscribe.get()
-                self._unsubscribe_attribute(attr)
+            if not all((self.to_subscribe.empty(), self.to_unsubscribe.empty())):
+                print "subscriptions being processed; acquiring lock..."
+                with self.lock:
+                    print "registry has the lock."
+                    while not self.to_subscribe.empty():
+                        attr, callback = self.to_subscribe.get()
+                        self._subscribe_attribute(attr, callback)
+                    while not self.to_unsubscribe.empty():
+                        attr = self.to_unsubscribe.get()
+                        self._unsubscribe_attribute(attr)
+                print "registry released lock"
 
     def register(self, kind, name):
         "Connect an item in the SVG to a corresponding Tango entity"
@@ -328,13 +333,19 @@ class Registry(Thread):
 
     def _subscribe_attribute(self, attrname, callback):
         if not attrname in self.listeners:
+            print "subscribe", attrname, "..."
+            t0 = time.time()
             listener = TaurusWebAttribute(attrname, callback)
             self.listeners[attrname] = listener
+            print "...sub done", attrname, ", took %f s." % (time.time()-t0)
 
     def _unsubscribe_attribute(self, attrname):
         listener = self.listeners.pop(attrname, None)
         if listener:
+            t0 = time.time()
+            print "unsubscribe", attrname, "..."
             listener.clear()
+            print "...unsub done", attrname, ", took %f s." % (time.time()-t0)
 
 
 if __name__ == '__main__':

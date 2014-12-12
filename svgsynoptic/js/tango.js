@@ -25,6 +25,7 @@ window.Tango = window.Tango || (function () {
     );
 
     var debug = d3.select("#debug");
+    var debug2 = d3.select("#debug2");
     var debug_interval;
     function toggleDebug() {
         if (debug_interval) {
@@ -32,6 +33,7 @@ window.Tango = window.Tango || (function () {
             clearInterval(debug_interval);
             debug_interval = null;
             debug.style("display", "none");
+            debug2.style("display", "none");
         } else {
             console.log("start debug");
             debug_interval = setInterval(function () {
@@ -45,6 +47,7 @@ window.Tango = window.Tango || (function () {
                 debug.html(debug_content({subs: subs}));
             }, 1000);
             debug.style("display", "block");
+            debug2.style("display", "block");
         }
     }
     window.addEventListener("keydown", function (event) {
@@ -55,6 +58,10 @@ window.Tango = window.Tango || (function () {
         }
     });
 
+    function debugMessage(msg) {
+        console.log(msg);
+        debug2.html(msg);
+    }
 
     // setup the websocket communication
 
@@ -215,7 +222,8 @@ window.Tango = window.Tango || (function () {
             }
         },
 
-        onmessage: onmessage
+        onmessage: onmessage,
+        debugMessage: debugMessage
     };
 
 

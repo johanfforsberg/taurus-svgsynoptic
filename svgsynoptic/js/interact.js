@@ -23,7 +23,7 @@ var Widget = window.Widget || {
     // better for our purposes.
     function sanitizeSvg (svg) {
 
-        // Setup all the layers that should be user selectable
+        // Setup all the layers that should be user selectble
         var layers = svg.selectAll("svg > g > g")
                 .filter(function () {
                     return d3.select(this).attr("inkscape:groupmode") == "layer";})
@@ -380,6 +380,8 @@ var Widget = window.Widget || {
                 }
                 return visible;
             })
+        // unseen devices should not show the last known state since
+        // that could be stale. So we remove all state classes.
             .each(function (d) {
                 var sel = d3.select(this);
                 if (!sel.classed("active"))
@@ -392,8 +394,8 @@ var Widget = window.Widget || {
 
         // don't unsubscribe things also in view
         // (there can be several instances)
-        Tango.unsubscribe(_.without(outside, inside), updateAttribute);
-        Tango.subscribe(inside, updateAttribute);
+        Tango.updateSubscriptions(inside, _.difference(outside, inside),
+                                  updateAttribute);
     }
 
     // The above could becone a bit heavy because a lot of elements

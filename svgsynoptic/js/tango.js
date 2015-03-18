@@ -104,24 +104,50 @@ window.Tango = window.Tango || (function () {
 
     }
 
-    //setupSSE();
+    // "Widget" will be connected to the Taurus widget if we're
+    // running in Qt.
+
+    // make this better
+    if (!Widget.visible)
+        setupSSE();
 
     function subscribe (models) {
-        models.forEach(function (model) {
-            Widget.visible(model, true);
-        });
-        // d3.json(subscribe_url)
-        //     .header("Content-Type", "application/json")
-        //     .post(JSON.stringify({models: models}));
+        if (Widget.visible) {
+            models.forEach(function (model) {
+                Widget.visible(model, true);
+            });
+        } else {
+            d3.json(subscribe_url)
+                .header("Content-Type", "application/json")
+                .post(JSON.stringify({models: models}));
+        }
     }
 
     function unsubscribe (models) {
-        models.forEach(function (model) {
-            Widget.visible(model, false);
-        });
-        // d3.json(unsubscribe_url)
-        //     .header("Content-Type", "application/json")
-        //     .post(JSON.stringify({models: models}));
+        if (Widget.visible) {
+            models.forEach(function (model) {
+                Widget.visible(model, false);
+            });
+        } else {
+            d3.json(unsubscribe_url)
+                .header("Content-Type", "application/json")
+                .post(JSON.stringify({models: models}));
+        }
+    }
+
+    function updateSubscriptions(subs, unsubs) {
+        if (Widget.visible) {
+            subs.forEach(function (model) {
+                Widget.visible(model, true);
+            });
+            unsubs.forEach(function (model) {
+                Widget.visible(model, false);
+            });
+        } else {
+            d3.json(unsubscribe_url)
+                .header("Content-Type", "application/json")
+                .post(JSON.stringify({models: models}));
+        }
     }
 
     var model_config = {}, last_events = {};
@@ -129,26 +155,34 @@ window.Tango = window.Tango || (function () {
     // "real" onmessage hook
     var onmessage = function (message) {
 
-        var event = JSON.parse(message), obsolete = [];
+        if (message.data)
+            var events = JSON.parse(message.data);
+        else
+            var events = JSON.parse(message);
+        var obsolete = [];
 
-        if (event.event_type == "value") {
-            var callbacks = subscriptions[event.model];
-            if (callbacks) {
-                if (event.model in model_config) {
-                    // add stored config information to the event
-                    _.merge(event, model_config[event.model]);
+        events.forEach(function (event) {
+            if (event.event_type == "value") {
+                var callbacks = subscriptions[event.model];
+                if (callbacks) {
+                    if (event.model in model_config) {
+                        // add stored config information to the event
+                        _.merge(event, model_config[event.model]);
+                    }
+                    callbacks.forEach(function (cb) {
+                        cb(event);
+                    });
+                    last_events[event.model] = event;
+                } else {
+                    obsolete.push(event.model);
                 }
-                callbacks.forEach(function (cb) {
-                    cb(event);
-                });
-                last_events[event.model] = event;
-            } else {
-                obsolete.push(event.model);
-            }
             // store configuration events for later use
-        } else if (event.event_type == "config") {
-            model_config[event.model] = event;
-        }
+            } else if (event.event_type == "config") {
+                model_config[event.model] = event;
+            } else if (event.event_type == "error") {
+                // handle errors!
+            }
+        });
     };
 
     // batch (un)subscribing once per second
@@ -194,10 +228,11 @@ window.Tango = window.Tango || (function () {
                     to_register.push(model);
                 }
             });
-            if (to_register.length > 0) {
-                subscribe(to_register);
-                //Synoptic.setActive(to_register, true);
-            }
+            // if (to_register.length > 0) {
+            //     subscribe(to_register);
+            //     //Synoptic.setActive(to_register, true);
+            // }
+            return to_register;
         },
 
         // stop receiving updates for models
@@ -216,10 +251,17 @@ window.Tango = window.Tango || (function () {
                     }
                 }
             });
-            if (to_unregister.length > 0) {
-                unsubscribe(to_unregister);
-                //Synoptic.setActive(to_unregister, false);
-            }
+            // if (to_unregister.length > 0) {
+            //     unsubscribe(to_unregister);
+            //     //Synoptic.setActive(to_unregister, false);
+            // }
+            return to_unregister;
+
+        },
+
+        updateSubscriptions: function (subscribe, unsubscribe, callback) {
+            updateSubscriptions(Tango.subscribe(subscribe, callback),
+                                Tango.unsubscribe(unsubscribe, callback));
         },
 
         onmessage: onmessage,

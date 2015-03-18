@@ -29,7 +29,8 @@ var Synoptic = window.Synoptic || {};
     // Load the actual SVG into the page
     function load (svg, section) {
         console.log("load", svg);
-        d3.xml(svg, "image/svg+xml", function(xml) {
+        d3.xml(svg, "image/svg+Xml", function(xml) {
+            console.log("xml" + xml);
             var svg = d3.select(document.importNode(xml.documentElement, true));
             d3.ns.prefix.inkscape = "http://www.inkscape.org/namespaces/inkscape";
             main(svg, section);

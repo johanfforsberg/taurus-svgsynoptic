@@ -8,7 +8,8 @@ Manager().changeDefaultPollingPeriod(1000)
 def error_str(err):
     if isinstance(err, PyTango.DevFailed):
         err = err[0]
-        return "[{0}] {1}".format(err.reason, err.desc.replace("\n", "\\n"))
+        #return "[{0}] {1}".format(err.reason, err.desc.replace("\n", "<br>"))
+        return "error"
     return str(err)
 
 

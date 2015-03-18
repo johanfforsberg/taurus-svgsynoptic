@@ -180,7 +180,7 @@ class SynopticWidget(TaurusWidget):
 
         # when the page (and all the JS) has loaded, load the SVG
         def load_svg():
-            print "blorrt", self.js
+            print "blorrt", svg
             self.js.load(svg, section)
         view.loadFinished.connect(load_svg)
 
@@ -227,7 +227,7 @@ class SynopticWidget(TaurusWidget):
     def _attribute_listener(self, event):
         # TODO: seems like multiline strings need more escaping, else
         # evaljs complains about "SyntaxError: Expected token ')'"
-        self.js.evaljs.emit("Tango.onmessage('%s')" % json.dumps(event))
+        self.js.evaljs.emit("Tango.onmessage(%r)" % json.dumps([event]))
 
     def __attribute_listener(self, evt_src, evt_type, evt_value):
 
@@ -295,8 +295,9 @@ class Registry(Thread):
     def __init__(self):
         Thread.__init__(self)
         self.listeners = {}
-        self.to_subscribe = Queue()
-        self.to_unsubscribe = Queue()
+        self.queue = Queue()
+        # self.to_subscribe = Queue()
+        # self.to_unsubscribe = Queue()
 
     def __del__(self):
         "Some extra freeing of stuff, to make sure"
@@ -309,32 +310,48 @@ class Registry(Thread):
         self.running = True
         while self.running:
             time.sleep(1.0)
-            if not all((self.to_subscribe.empty(), self.to_unsubscribe.empty())):
-                print "subscriptions being processed; acquiring lock..."
-                with self.lock:
-                    print "registry has the lock."
-                    while not self.to_subscribe.empty():
-                        attr, callback = self.to_subscribe.get()
-                        self._subscribe_attribute(attr, callback)
-                    while not self.to_unsubscribe.empty():
-                        attr = self.to_unsubscribe.get()
-                        self._unsubscribe_attribute(attr)
-                print "registry released lock"
+            if not self.queue.empty():
+                subs = dict()
+                unsubs = set()
+                while not self.queue.empty():
+                    action, data = self.queue.get()
+                    if action == "subscribe":
+                        attr, callback = data
+                        if attr in unsubs:
+                            # unsubscribe, then subscribe again?
+                            # we don't need to do anything!
+                            print "***skipping unsubscribe-subscribe***"
+                            unsubs.remove(attr)
+                        else:
+                            subs[attr] = callback
+                    elif action == "unsubscribe":
+                        attr = data
+                        if attr in subs:
+                            # subscribe, then unsubscribe; let's do nothing!
+                            print "***skipping subscribe-unsubscribe***"
+                            del subs[attr]
+                        else:
+                            unsubs.add(attr)
+                for attr, callback in subs.items():
+                    self._subscribe_attribute(attr, callback)
+                for attr in unsubs:
+                    self._unsubscribe_attribute(attr)
 
     def register(self, kind, name):
         "Connect an item in the SVG to a corresponding Tango entity"
         # remove
 
     def subscribe_attribute(self, attrname, callback):
-        self.to_subscribe.put((str(attrname), callback))
+        self.queue.put(("subscribe", (str(attrname), callback)))
 
     def unsubscribe_attribute(self, attrname):
-        self.to_unsubscribe.put(str(attrname))
+        self.queue.put(("unsubscribe", (str(attrname))))
 
     def _subscribe_attribute(self, attrname, callback):
-        if not attrname in self.listeners:
-            print "subscribe", attrname, "..."
+        if attrname not in self.listeners:
+            print "subscribe", attrname,
             t0 = time.time()
+            #with self.lock:
             listener = TaurusWebAttribute(attrname, callback)
             self.listeners[attrname] = listener
             print "...sub done", attrname, ", took %f s." % (time.time()-t0)
@@ -343,14 +360,14 @@ class Registry(Thread):
         listener = self.listeners.pop(attrname, None)
         if listener:
             t0 = time.time()
-            print "unsubscribe", attrname, "..."
+            print "unsubscribe", attrname,
+            #with self.lock:
             listener.clear()
             print "...unsub done", attrname, ", took %f s." % (time.time()-t0)
 
 
 if __name__ == '__main__':
     import sys
-    from PyQt4 import Qt
     print sys.argv[1]
     qapp = Qt.QApplication([])
     sw = SynopticWidget()

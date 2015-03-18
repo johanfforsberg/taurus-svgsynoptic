@@ -84,6 +84,7 @@ svg .selection {
     stroke-width: 10px;
     stroke-linejoin: round;
     opacity: 0.5;
+    pointer-events: none;
 }
 
 /* alarms */

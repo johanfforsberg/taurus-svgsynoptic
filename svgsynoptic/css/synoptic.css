@@ -5,6 +5,7 @@ svg {
 
 svg text {
     pointer-events: none;
+    shape-rendering: optimizeSpeed;
 }
 
 svg text.attribute {

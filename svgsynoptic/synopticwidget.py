@@ -351,19 +351,21 @@ class Registry(Thread):
         if attrname not in self.listeners:
             print "subscribe", attrname,
             t0 = time.time()
-            #with self.lock:
-            listener = TaurusWebAttribute(attrname, callback)
-            self.listeners[attrname] = listener
-            print "...sub done", attrname, ", took %f s." % (time.time()-t0)
+            with self.lock:
+                print "...got lock"
+                listener = TaurusWebAttribute(attrname, callback)
+                self.listeners[attrname] = listener
+                print "...sub done", attrname, ", took %f s." % (time.time()-t0)
 
     def _unsubscribe_attribute(self, attrname):
         listener = self.listeners.pop(attrname, None)
         if listener:
             t0 = time.time()
             print "unsubscribe", attrname,
-            #with self.lock:
-            listener.clear()
-            print "...unsub done", attrname, ", took %f s." % (time.time()-t0)
+            with self.lock:
+                print "...got lock"
+                listener.clear()
+                print "...unsub done", attrname, ", took %f s." % (time.time()-t0)
 
 
 if __name__ == '__main__':

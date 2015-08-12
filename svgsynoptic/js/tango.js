@@ -167,7 +167,7 @@ window.Tango = window.Tango || (function () {
                 if (callbacks) {
                     if (event.model in model_config) {
                         // add stored config information to the event
-                        _.merge(event, model_config[event.model]);
+                        _.defaults(event, model_config[event.model]);
                     }
                     callbacks.forEach(function (cb) {
                         cb(event);
